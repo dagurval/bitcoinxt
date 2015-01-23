@@ -109,6 +109,8 @@ BITCOIN_CORE_H = \
   core_memusage.h \
   dummythin.h \
   hash.h \
+  httprpc.h \
+  httpserver.h \
   inflightindex.h \
   init.h \
   ipgroups.h \
@@ -205,6 +207,8 @@ libbitcoin_server_a_SOURCES = \
   compactthin.cpp \
   compacttxfinder.cpp \
   curl_wrapper.cpp \
+  httprpc.cpp \
+  httpserver.cpp \
   inflightindex.cpp \
   init.cpp \
   ipgroups.cpp \
