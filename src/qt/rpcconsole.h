@@ -13,6 +13,8 @@
 #include <QWidget>
 
 class ClientModel;
+class PlatformStyle;
+class RPCTimerInterface;
 
 namespace Ui {
     class RPCConsole;
@@ -98,6 +100,7 @@ private:
     QStringList history;
     int historyPtr;
     NodeId cachedNodeid;
+    RPCTimerInterface *rpcTimerInterface;
 };
 
 #endif // BITCOIN_QT_RPCCONSOLE_H
