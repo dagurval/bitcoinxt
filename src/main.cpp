@@ -4526,7 +4526,6 @@ static void RelayAddress(const CAddress& addr, bool fReachable, CConnman* connma
             uint64_t hashKey = CSipHasher(hasher).Write(pnode->id).Finalize();
             mapMix.emplace(hashKey, pnode);
         }
-        return true;
     };
 
     auto pushfunc = [&addr, &mapMix, &nRelayNodes] {
