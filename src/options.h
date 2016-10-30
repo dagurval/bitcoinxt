@@ -14,6 +14,12 @@ struct Opt {
     std::vector<std::string> UAComment(bool validate = false);
     int ScriptCheckThreads();
     int64_t CheckpointDays();
+
+    // We will be able to give proofs for outputs spent
+    // from (and including) this block height.
+    //
+    // If parameter is changed, then chain will require a re-scan.
+    int64_t SpentProofFromHeight() const;
 };
 
 /** Maximum number of script-checking threads allowed */

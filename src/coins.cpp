@@ -6,6 +6,7 @@
 
 #include "memusage.h"
 #include "random.h"
+#include "options.h"
 
 #include <assert.h>
 
@@ -32,13 +33,49 @@ void CCoins::CalcMaskSize(unsigned int &nBytes, unsigned int &nNonzeroBytes) con
     nBytes += nLastUsedByte;
 }
 
-bool CCoins::Spend(uint32_t nPos) 
+bool CCoins::Spend(uint32_t nPos, int blockHeight)
 {
     if (nPos >= vout.size() || vout[nPos].IsNull())
         return false;
     vout[nPos].SetNull();
+
+    StoreHeight(nPos, blockHeight);
+
     Cleanup();
     return true;
+}
+
+// Store block height where output was spent
+void CCoins::StoreHeight(uint32_t nPos, int blockHeight) {
+
+    static const int64_t minHeigth = Opt().SpentProofFromHeight();
+    bool canStoreHeight = blockHeight > minHeigth
+        && blockHeight != OUT_HEIGHT_MEMPOOL;
+
+    if (!canStoreHeight)
+        return;
+
+    // CScript stores <= 16 in a special way.
+    assert(blockHeight > 16);
+    assert(vout[nPos].IsNull());
+    assert(vout[nPos].scriptPubKey.empty());
+
+    std::vector<unsigned char> serialized = CScriptNum::serialize(blockHeight);
+    vout[nPos].scriptPubKey.insert(end(vout[nPos].scriptPubKey),
+            begin(serialized), end(serialized));
+
+    // Should still be considered null
+    assert(vout[nPos].IsNull());
+}
+
+int CCoins::ReadHeight(uint32_t nPos) {
+    if (IsAvailable(nPos))
+        throw std::runtime_error("Cannot read spent height. Output not spent");
+
+    if (vout[nPos].scriptPubKey.empty())
+        return OUT_HEIGHT_UNKNOWN;
+
+    return CScriptNum(vout[nPos].scriptPubKey, false).getint();
 }
 
 bool CCoinsView::GetCoins(const uint256 &txid, CCoins &coins) const { return false; }
@@ -128,11 +165,8 @@ const CCoins* CCoinsViewCache::AccessCoins(const uint256 &txid) const {
 
 bool CCoinsViewCache::HaveCoins(const uint256 &txid) const {
     CCoinsMap::const_iterator it = FetchCoins(txid);
-    // We're using vtx.empty() instead of IsPruned here for performance reasons,
-    // as we only care about the case where a transaction was replaced entirely
-    // in a reorganization (which wipes vout entirely, as opposed to spending
-    // which just cleans individual outputs).
-    return (it != cacheCoins.end() && !it->second.coins.vout.empty());
+    return (it != cacheCoins.end()
+            && !it->second.coins.IsPruned());
 }
 
 uint256 CCoinsViewCache::GetBestBlock() const {

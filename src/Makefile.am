@@ -123,6 +123,7 @@ BITCOIN_CORE_H = \
   primitives/transaction.h \
   process_merkleblock.h \
   process_xthinblock.h \
+  proof.h \
   protocol.h \
   pubkey.h \
   random.h \
@@ -214,6 +215,7 @@ libbitcoin_server_a_SOURCES = \
   pow.cpp \
   process_merkleblock.cpp \
   process_xthinblock.cpp \
+  proof.cpp \
   rest.cpp \
   rpcblockchain.cpp \
   rpcmining.cpp \

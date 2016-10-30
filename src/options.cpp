@@ -2,6 +2,7 @@
 #include "util.h"
 #include <stdexcept>
 #include <boost/thread.hpp>
+#include <algorithm>
 
 static std::unique_ptr<ArgGetter> Args;
 
@@ -67,6 +68,20 @@ int Opt::ScriptCheckThreads() {
 int64_t Opt::CheckpointDays() {
     int64_t def = DEFAULT_CHECKPOINT_DAYS * std::max(1, ScriptCheckThreads());
     return std::max(int64_t(1), Args->GetArg("-checkpoint-days", def));
+}
+
+int64_t Opt::SpentProofFromHeight() const {
+
+    // TODO: Pick a meaningful default value.
+    // 1 year (since 17 Oct. 2016)
+    int64_t DEFAULT_PROOF_FROM_HEIGHT = 382162;
+
+    // Reason for magic number 17:
+    // CScript encodes values <= 16 in a special way.
+    // CScript is used to store block height in spent outputs.
+    int64_t height = std::max(int64_t(17), Args->GetArg(
+                "-spent-prove-from", DEFAULT_PROOF_FROM_HEIGHT));
+    return height;
 }
 
 std::unique_ptr<ArgReset> SetDummyArgGetter(std::unique_ptr<ArgGetter> getter) {

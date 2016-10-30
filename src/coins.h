@@ -18,7 +18,15 @@
 #include <boost/foreach.hpp>
 #include <boost/unordered_map.hpp>
 
-/** 
+const int OUT_HEIGHT_MEMPOOL = -1;
+const int OUT_HEIGHT_UNKNOWN = -2;
+
+inline bool canPruneSpent(const CTxOut& out) {
+    // !empty() means that block height it stored in script.
+    return out.IsNull() && out.scriptPubKey.empty();
+}
+
+/**
  * Pruned version of CTransaction: only retains metadata and unspent transaction outputs
  *
  * Serialized format:
@@ -111,7 +119,7 @@ public:
 
     //!remove spent outputs at the end of vout
     void Cleanup() {
-        while (vout.size() > 0 && vout.back().IsNull())
+        while (vout.size() > 0 && canPruneSpent(vout.back()))
             vout.pop_back();
         if (vout.empty())
             std::vector<CTxOut>().swap(vout);
@@ -239,7 +247,7 @@ public:
     }
 
     //! mark a vout spent
-    bool Spend(uint32_t nPos);
+    bool Spend(uint32_t nPos, int blockHeight);
 
     //! check whether a particular output is still available
     bool IsAvailable(unsigned int nPos) const {
@@ -262,6 +270,9 @@ public:
         }
         return ret;
     }
+
+    void StoreHeight(uint32_t nPos, int blockHeight);
+    int ReadHeight(uint32_t nPos);
 };
 
 class CCoinsKeyHasher
@@ -356,10 +367,10 @@ public:
 
 class CCoinsViewCache;
 
-/** 
+/**
  * A reference to a mutable cache entry. Encapsulating it allows us to run
  *  cleanup code after the modification is finished, and keeping track of
- *  concurrent modifications. 
+ *  concurrent modifications.
  */
 class CCoinsModifier
 {
@@ -386,7 +397,7 @@ protected:
 
     /**
      * Make mutable so that we can "fill the cache" even from Get-methods
-     * declared as "const".  
+     * declared as "const".
      */
     mutable uint256 hashBlock;
     mutable CCoinsMap cacheCoins;
@@ -432,7 +443,7 @@ public:
     //! Calculate the size of the cache (in bytes)
     size_t DynamicMemoryUsage() const;
 
-    /** 
+    /**
      * Amount of bitcoins coming in to a transaction
      * Note that lightweight clients may not know anything besides the hash of previous transactions,
      * so may not be able to calculate this.

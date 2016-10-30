@@ -22,6 +22,7 @@
 #include "pow.h"
 #include "process_merkleblock.h"
 #include "process_xthinblock.h"
+#include "proof.h"
 #include "thinblockbuilder.h"
 #include "thinblockconcluder.h"
 #include "thinblockmanager.h"
@@ -972,7 +973,7 @@ bool CheckFinalTx(const CTransaction &tx, int flags)
 /**
  * Check transaction inputs to mitigate two
  * potential denial-of-service attacks:
- * 
+ *
  * 1. scriptSigs with extra data stuffed into them,
  *    not consumed by scriptPubKey (or P2SH script)
  * 2. P2SH scripts with a crazy number of expensive
@@ -1959,7 +1960,7 @@ void UpdateCoins(const CTransaction& tx, CValidationState &state, CCoinsViewCach
                 assert(false);
             // mark an outpoint spent, and construct undo information
             txundo.vprevout.push_back(CTxInUndo(coins->vout[nPos]));
-            coins->Spend(nPos);
+            coins->Spend(nPos, nHeight);
             if (coins->vout.size() == 0) {
                 CTxInUndo& undo = txundo.vprevout.back();
                 undo.nHeight = coins->nHeight;
@@ -2906,7 +2907,7 @@ static int64_t nTimeFlush = 0;
 static int64_t nTimeChainState = 0;
 static int64_t nTimePostConnect = 0;
 
-/** 
+/**
  * Connect a new block to chainActive. pblock is either NULL or a pointer to a CBlock
  * corresponding to pindexNew, to bypass loading it again from disk.
  */
@@ -4827,7 +4828,7 @@ bool ProcessGetUTXOs(const vector<COutPoint> &vOutPoints, bool fCheckMemPool, ve
 {
     // Defined by BIP 64.
     //
-    // Allows a peer to retrieve the CTxOut structures corresponding to the given COutPoints. 
+    // Allows a peer to retrieve the CTxOut structures corresponding to the given COutPoints.
     // Note that this data is not authenticated by anything: this code could just invent any
     // old rubbish and hand it back, with the peer being unable to tell unless they are checking
     // the outpoints against some out of band data.
@@ -5173,7 +5174,6 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         }
     }
 
-
     else if (strCommand == "addr")
     {
         vector<CAddress> vAddr;
@@ -5432,7 +5432,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             CValidationState state;
 
             mapAlreadyAskedFor.erase(inv);
-        
+
             if (!AlreadyHave(inv) && AcceptToMemoryPool(mempool, state, tx, true, &fMissingInputs))
             {
                 mempool.check(pcoinsTip);
@@ -5537,6 +5537,20 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
                                    state.GetRejectReason().substr(0, MAX_REJECT_MESSAGE_LENGTH), inv.hash);
                 if (nDoS > 0)
                     Misbehaving(pfrom->GetId(), nDoS);
+
+                if (state.GetRejectCode() == REJECT_DUPLICATE) {
+                    try {
+                        InputSpentProver prover(*pcoinsTip, mempool);
+                        CTransaction proof = prover.proveSpent(tx);
+                        LogPrintf("Proved that input in tx %s is spent in %s\n",
+                                tx.GetHash().ToString(), proof.GetHash().ToString());
+                        pfrom->PushMessage("tx", proof);
+                    }
+                    catch (const std::exception& e) {
+                        LogPrintf("Could not provide proof that %s is a duplicate tx: %s\n",
+                            tx.GetHash().ToString(), e.what());
+                    }
+                }
             }
         }
     }
@@ -5887,7 +5901,6 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             }
         }
     }
-
     else
     {
         // Ignore unknown commands for extensibility
