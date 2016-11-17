@@ -161,12 +161,9 @@ UniValue CallRPC(const string& strMethod, const UniValue& params)
     std::string strRPCUserColonPass;
     if (mapArgs["-rpcpassword"] == "") {
         // Try fall back to cookie-based authentication if no password is provided
-        if (!GetAuthCookie(&strRPCUserColonPass)) {
-            throw runtime_error(strprintf(
-                _("Could not locate RPC credentials. No authentication cookie could be found, and no rpcpassword is set in the configuration file (%s)"),
+        throw runtime_error(strprintf(
+                    "rpcpassword is not set in the configuration file (%s)",
                     GetConfigFile().string().c_str()));
-
-        }
     } else {
         strRPCUserColonPass = mapArgs["-rpcuser"] + ":" + mapArgs["-rpcpassword"];
     }
@@ -189,7 +186,6 @@ UniValue CallRPC(const string& strMethod, const UniValue& params)
         event_base_free(base);
         throw CConnectionFailed("send http request failed");
     }
->>>>>>> 40b556d... evhttpd implementation
 
     event_base_dispatch(base);
     evhttp_connection_free(evcon);
