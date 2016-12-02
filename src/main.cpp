@@ -4988,9 +4988,10 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             return true; // Ignore as per BIP152
 
         LOCK(cs_main);
-        NodeStatePtr(pfrom->id)->supportsCompactBlocks = true;
-        NodeStatePtr(pfrom->id)->thinblock.reset(
-                new CompactWorker(thinblockmg, pfrom->id));
+        NodeStatePtr node(pfrom->id);
+        node->supportsCompactBlocks = true;
+        node->prefersBlocks = highBandwidth;
+        node->thinblock.reset(new CompactWorker(thinblockmg, pfrom->id));
     }
 
     else if (strCommand == "sendheaders")
