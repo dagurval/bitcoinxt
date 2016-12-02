@@ -363,6 +363,9 @@ class DummyBlockAnnounceSender : BlockAnnounceSender {
         bool canAnnounceWithHeaders() const override {
             return BlockAnnounceSender::canAnnounceWithHeaders();
         }
+        bool canAnnounceWithBlock() const override {
+            return BlockAnnounceSender::canAnnounceWithBlock();
+        }
         bool announceWithHeaders() override {
             return BlockAnnounceSender::announceWithHeaders();
         }
@@ -401,6 +404,7 @@ BOOST_AUTO_TEST_CASE(canAnnounceWithHeaders) {
     DummyBlockIndexEntry entry(block);
     SetTipRAII activeTip(&entry.index);
     NodeStatePtr(to.id)->prefersHeaders = true;
+    to.blocksToAnnounce = std::vector<uint256>(1, block);
     BOOST_CHECK(ann.canAnnounceWithHeaders());
 
     // To many header announcements
@@ -480,6 +484,34 @@ BOOST_AUTO_TEST_CASE(announce_with_inv) {
     BOOST_CHECK_EQUAL(
             entry2.hash.ToString(),
             to.vInventoryToSend.at(0).hash.ToString());
+}
+
+BOOST_AUTO_TEST_CASE(can_announce_with_block) {
+
+    /// These are same criterias as for announcing with headers.
+    /// All must be fulfilled, in addition to more.
+
+    uint256 block = uint256S("0xABBA");
+    // Add block to our active chain.
+    DummyBlockIndexEntry entry(block);
+    SetTipRAII activeTip(&entry.index);
+    to.blocksToAnnounce = std::vector<uint256>(1, block);
+    BOOST_CHECK(ann.canAnnounceWithBlock());
+
+    // Can only announce with a block
+    // if we have a single announcement
+    to.blocksToAnnounce = std::vector<uint256>(2, block);
+    BOOST_CHECK(!ann.canAnnounceWithBlock());
+
+    // We want to announce a block in our active chain. Thats fine.
+    to.blocksToAnnounce = std::vector<uint256>(1, block);
+    BOOST_CHECK(ann.canAnnounceWithBlock());
+
+    // A block not in our active chain,
+    // for example: we re-orged from it.
+    DummyBlockIndexEntry entry2(uint256S("0xFEED"));
+    to.blocksToAnnounce = std::vector<uint256>(1, entry2.hash);
+    BOOST_CHECK(!ann.canAnnounceWithBlock());
 }
 
 BOOST_AUTO_TEST_CASE(announce_with_block) {
