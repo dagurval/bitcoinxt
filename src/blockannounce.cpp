@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include "blockannounce.h"
+#include "blocksender.h"
 #include "main.h" // for mapBlockIndex, UpdateBlockAvailability, IsInitialBlockDownload
 #include "options.h"
 #include "timedata.h"
@@ -205,9 +206,6 @@ bool BlockAnnounceSender::canAnnounceWithHeaders() const {
     if (to.blocksToAnnounce.size() > MAX_BLOCKS_TO_ANNOUNCE)
         return false;
 
-    if (!NodeStatePtr(to.id)->prefersHeaders)
-        return false;
-
     // If we come across any
     // headers that aren't on chainActive, give up.
     for (auto h : to.blocksToAnnounce) {
@@ -224,6 +222,13 @@ bool BlockAnnounceSender::canAnnounceWithHeaders() const {
     }
 
     return blocksConnect(to.blocksToAnnounce);
+}
+
+// We only announce with a thin block if there is one header to announce.
+// In addition, same limitations as announcing as header apply.
+bool BlockAnnounceSender::canAnnounceWithBlock() const {
+    return to.blocksToAnnounce.size() == 1
+        && canAnnounceWithHeaders();
 }
 
 bool BlockAnnounceSender::announceWithHeaders() {
@@ -277,17 +282,40 @@ bool BlockAnnounceSender::announceWithHeaders() {
     return true;
 }
 
+void BlockAnnounceSender::announceWithBlock() {
+    assert(to.blocksToAnnounce.size() == 1);
+    uint256 hash = to.blocksToAnnounce[0];
+    CBlockIndex* block = mapBlockIndex.find(hash)->second;
+
+    BlockSender().sendBlock(to, *block, MSG_CMPCT_BLOCK, block->nHeight);
+
+    LogPrint("net", "%s: block %s to peer=%d\n",
+            __func__, hash.ToString(), to.id);
+}
+
 void BlockAnnounceSender::announce() {
     LOCK(to.cs_inventory);
 
     if (to.blocksToAnnounce.empty())
         return;
 
-    LogPrint("ann", "Announce for peer=%d, %d blocks, prefersheaders: %d\n",
-            to.id, to.blocksToAnnounce.size(), NodeStatePtr(to.id)->prefersHeaders);
+    NodeStatePtr node(to.id);
+    LogPrint("ann", "Announce for peer=%d, %d blocks, prefersheaders: %d, prefersblocks: %d\n",
+            to.id, to.blocksToAnnounce.size(),
+            node->prefersHeaders, node->prefersBlocks);
 
     try {
-        if (!(canAnnounceWithHeaders() && announceWithHeaders()))
+        bool announced = false;
+
+        if (node->prefersBlocks && canAnnounceWithBlock()) {
+            announceWithBlock();
+            announced = true;
+        }
+
+        if (node->prefersHeaders && canAnnounceWithHeaders())
+            announced = announceWithHeaders();
+
+        if (!announced)
             announceWithInv();
     }
     catch (const std::exception& e) {
