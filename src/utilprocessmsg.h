@@ -21,4 +21,6 @@ struct BlockInFlightMarker {
 };
 inline BlockInFlightMarker::~BlockInFlightMarker() { }
 
+void updateBestHeaderSent(CNode& node, CBlockIndex* blockIndex);
+
 #endif

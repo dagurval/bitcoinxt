@@ -9,6 +9,7 @@
 #include "inflightindex.h"
 #include "nodestate.h"
 #include "util.h"
+#include "utilprocessmsg.h"
 #include "thinblockmanager.h"
 #include "thinblock.h"
 
@@ -277,17 +278,18 @@ bool BlockAnnounceSender::announceWithHeaders() {
             headers.back().GetHash().ToString(), to.id);
 
     to.PushMessage("headers", headers);
-    NodeStatePtr(to.id)->bestHeaderSent = best;
+    updateBestHeaderSent(to, best);
 
     return true;
 }
 
-void BlockAnnounceSender::announceWithBlock() {
+void BlockAnnounceSender::announceWithBlock(BlockSender& sender) {
     assert(to.blocksToAnnounce.size() == 1);
     uint256 hash = to.blocksToAnnounce[0];
     CBlockIndex* block = mapBlockIndex.find(hash)->second;
 
-    BlockSender().sendBlock(to, *block, MSG_CMPCT_BLOCK, block->nHeight);
+    sender.sendBlock(to, *block, MSG_CMPCT_BLOCK, block->nHeight);
+    updateBestHeaderSent(to, block);
 
     LogPrint("net", "%s: block %s to peer=%d\n",
             __func__, hash.ToString(), to.id);
@@ -308,7 +310,8 @@ void BlockAnnounceSender::announce() {
         bool announced = false;
 
         if (node->prefersBlocks && canAnnounceWithBlock()) {
-            announceWithBlock();
+            BlockSender sender;
+            announceWithBlock(sender);
             announced = true;
         }
 

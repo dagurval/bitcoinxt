@@ -5,6 +5,7 @@
 #include <boost/test/unit_test.hpp>
 #include "test/testutil.h"
 #include "blockannounce.h"
+#include "blocksender.h"
 #include "inflightindex.h"
 #include "test/thinblockutil.h"
 #include "options.h"
@@ -368,6 +369,9 @@ class DummyBlockAnnounceSender : BlockAnnounceSender {
         void announceWithInv() override {
             return BlockAnnounceSender::announceWithInv();
         }
+        void announceWithBlock(BlockSender& s) override {
+            return BlockAnnounceSender::announceWithBlock(s);
+        }
 };
 
 struct BlockAnnounceSenderFixture {
@@ -476,6 +480,33 @@ BOOST_AUTO_TEST_CASE(announce_with_inv) {
     BOOST_CHECK_EQUAL(
             entry2.hash.ToString(),
             to.vInventoryToSend.at(0).hash.ToString());
+}
+
+BOOST_AUTO_TEST_CASE(announce_with_block) {
+    DummyBlockIndexEntry entry1(uint256S("0xBAD"));
+    DummyBlockIndexEntry entry2(uint256S("0xBEEF"));
+    entry2.index.pprev = &entry1.index;
+
+    // Since it's only one block to announce, it
+    // can be announced with block.
+    to.blocksToAnnounce = { entry2.hash };
+    NodeStatePtr(to.id)->bestHeaderSent = &entry1.index;
+    NodeStatePtr(to.id)->supportsCompactBlocks = true;
+
+    struct DummyBlockSender : public BlockSender {
+
+        bool readBlockFromDisk(CBlock& block, const CBlockIndex*) override {
+            block = TestBlock1();
+            return true;
+        }
+    };
+    DummyBlockSender sender;
+    ann.announceWithBlock(sender);
+    BOOST_CHECK_EQUAL(1, to.messages.size());
+    BOOST_CHECK_EQUAL("cmpctblock", to.messages.at(0));
+
+    // bestHeaderSent should now be entry3
+    BOOST_CHECK(NodeStatePtr(to.id)->bestHeaderSent == &entry2.index);
 }
 
 BOOST_AUTO_TEST_CASE(find_headers_to_announce) {

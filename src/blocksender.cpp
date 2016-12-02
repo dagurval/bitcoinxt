@@ -8,6 +8,7 @@
 #include "chain.h"
 #include "chainparams.h"
 #include "util.h"
+#include "utilprocessmsg.h" // updateBestHeaderSent
 #include "net.h"
 #include "xthin.h"
 #include "merkleblock.h"
@@ -45,16 +46,6 @@ bool BlockSender::canSend(const CChain& activeChain, const CBlockIndex& block,
         LogPrintf("ignoring request for old block that isn't in the main chain\n");
 
     return send;
-}
-
-void updateBestHeaderSent(CNode& node, CBlockIndex* blockIndex) {
-    // When we send a block, were also sending its header.
-    NodeStatePtr state(node.id);
-    if (!state->bestHeaderSent)
-        state->bestHeaderSent = blockIndex;
-
-    if (state->bestHeaderSent->nHeight <= blockIndex->nHeight)
-        state->bestHeaderSent = blockIndex;
 }
 
 void BlockSender::send(const CChain& activeChain, CNode& node,

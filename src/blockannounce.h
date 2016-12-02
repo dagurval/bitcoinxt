@@ -7,6 +7,7 @@
 #include "uint256.h"
 #include <vector>
 
+class BlockSender;
 class CInv;
 class CNode;
 class ThinBlockManager;
@@ -67,7 +68,7 @@ class BlockAnnounceSender {
         virtual bool canAnnounceWithBlock() const;
 
         virtual bool announceWithHeaders();
-        virtual void announceWithBlock();
+        virtual void announceWithBlock(BlockSender& sender);
         virtual void announceWithInv();
 
     private:
