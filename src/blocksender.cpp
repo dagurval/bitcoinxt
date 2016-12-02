@@ -8,12 +8,20 @@
 #include "chain.h"
 #include "chainparams.h"
 #include "util.h"
+#include "utilprocessmsg.h" // updateBestHeaderSent
 #include "net.h"
 #include "xthin.h"
 #include "merkleblock.h"
 #include "main.h" // ReadBlockFromDisk
 #include "nodestate.h"
 #include <vector>
+
+/** Maximum depth of blocks we're willing to serve as compact blocks to peers
+ *  when requested. For older blocks, a regular BLOCK response will be sent. */
+static const int MAX_CMPCTBLOCK_DEPTH = 5;
+/** Maximum depth of blocks we're willing to respond to GETBLOCKTXN requests for. */
+static const int MAX_BLOCKTXN_DEPTH = 10;
+
 
 BlockSender::BlockSender() {
 }
@@ -45,16 +53,6 @@ bool BlockSender::canSend(const CChain& activeChain, const CBlockIndex& block,
         LogPrintf("ignoring request for old block that isn't in the main chain\n");
 
     return send;
-}
-
-void updateBestHeaderSent(CNode& node, CBlockIndex* blockIndex) {
-    // When we send a block, were also sending its header.
-    NodeStatePtr state(node.id);
-    if (!state->bestHeaderSent)
-        state->bestHeaderSent = blockIndex;
-
-    if (state->bestHeaderSent->nHeight <= blockIndex->nHeight)
-        state->bestHeaderSent = blockIndex;
 }
 
 void BlockSender::send(const CChain& activeChain, CNode& node,
@@ -94,6 +92,8 @@ void BlockSender::sendBlock(CNode& node,
     if (!readBlockFromDisk(block, &blockIndex))
         assert(!"cannot load block from disk");
 
+    LogPrintf("sending block, inv type %d, supports compact blocks: %d\n", invType,
+            NodeStatePtr(node.id)->supportsCompactBlocks);
     assert(!block.IsNull());
 
     // We only support MSG_XTHINBLOCK, if peer wants MSG_THINBLOCK,
@@ -138,12 +138,17 @@ void BlockSender::sendBlock(CNode& node,
     }
 
     if (invType == MSG_CMPCT_BLOCK && NodeStatePtr(node.id)->supportsCompactBlocks) {
-        if (blockIndex.nHeight >= activeChainHeight - 10) {
+        if (blockIndex.nHeight >= activeChainHeight - MAX_CMPCTBLOCK_DEPTH) {
+            LogPrintf("cmpctblock within depth %d, %d peer=%d\n",
+                    blockIndex.nHeight, activeChainHeight, node.id);
             CompactBlock cmpct(block, *choosePrefiller(node));
             node.PushMessage("cmpctblock", cmpct);
         }
-        else
+        else {
+            LogPrintf("cmpctblock outside depth %d, %d peer=%d\n",
+                    blockIndex.nHeight, activeChainHeight, node.id);
             node.PushMessage("block", block);
+        }
         return;
     }
 

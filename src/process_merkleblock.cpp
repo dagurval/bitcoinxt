@@ -48,25 +48,30 @@ void ProcessMerkleBlock(CNode& pfrom, CDataStream& vRecv,
 
     if (HaveBlockData(hash)) {
         LogPrint("thin", "already had block %s, "
-                "ignoring merkleblock (peer %d)\n",
+                "ignoring merkleblock peer=%d\n",
                 hash.ToString(), pfrom.id);
-        worker.setAvailable();
+        worker.stopWork(hash);
         return;
     }
+
+    if (processHeader.requestConnectHeaders(merkleBlock.header, pfrom))
+        return;
 
     std::vector<CBlockHeader> headers(1, merkleBlock.header);
-    if (!processHeader(headers, false, false)) {
+    if (!processHeader(headers, false)) {
         LogPrint("thin", "Header failed for merkleblock peer=%d\n", pfrom.id);
-        worker.setAvailable();
+        worker.stopWork(hash);
         return;
     }
 
-    if (!worker.isAvailable() && worker.blockHash() != hash)
-        LogPrint("thin", "expected peer %d to be working on %s, "
-                "but received block %s, switching peer to new block\n",
-                pfrom.id, worker.blockStr(), hash.ToString());
+    if (!worker.isAvailable2() && !worker.isWorkingOn(hash)) {
+        LogPrint("thin", "expected peer to be working on another block, "
+                "but switching to %s peer=%d\n",
+                hash.ToString(), pfrom.id);
+        worker.stopAllWork();
+    }
 
-    worker.setToWork(hash);
+    worker.addWork(hash);
 
     LogPrint("thin", "received stub for block %s (peer %d) ",
             hash.ToString(), pfrom.id);
@@ -74,15 +79,15 @@ void ProcessMerkleBlock(CNode& pfrom, CDataStream& vRecv,
     // Now attempt to reconstruct the block from the state of our memory pool.
     try {
         ThinBloomStub stubData(merkleBlock);
-        worker.buildStub(stubData, txfinder);
+        worker.buildStub(pfrom, stubData, txfinder);
         SendPing(pfrom, hash);
     }
     catch (const thinblock_error& e) {
         pfrom.PushMessage("reject", std::string("merkleblock"),
                 REJECT_MALFORMED, std::string("bad merkle tree"), hash);
-        Misbehaving(pfrom.GetId(), 10);  // FIXME: Is this DoS policy reasonable? Immediate disconnect is better?
+        Misbehaving(pfrom.GetId(), 10);
         LogPrintf("%s peer=%d", e.what(), pfrom.GetId());
-        worker.setAvailable();
+        worker.stopAllWork();
         return;
     }
 }

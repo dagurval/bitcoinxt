@@ -14,9 +14,10 @@ class BlockInFlightMarker;
 class BlockHeaderProcessor {
     public:
         virtual bool operator()(const std::vector<CBlockHeader>& headers,
-                bool peerSentMax,
-                bool maybeAnnouncement) = 0;
+                bool peerSentMax) = 0;
         virtual ~BlockHeaderProcessor() = 0;
+
+        virtual bool requestConnectHeaders(const CBlockHeader& h, CNode& from) = 0;
 };
 inline BlockHeaderProcessor::~BlockHeaderProcessor() { }
 
@@ -25,12 +26,11 @@ class DefaultHeaderProcessor : public BlockHeaderProcessor {
 
         DefaultHeaderProcessor(CNode* pfrom,
                 InFlightIndex&, ThinBlockManager&, BlockInFlightMarker&,
-                std::function<void()> checkBlockIndex,
-                std::function<void()> sendGetHeaders = [](){ });
+                std::function<void()> checkBlockIndex);
 
         bool operator()(const std::vector<CBlockHeader>& headers,
-                bool peerSentMax,
-                bool maybeAnnouncement) override;
+                bool peerSentMax) override;
+        bool requestConnectHeaders(const CBlockHeader& h, CNode& from) override;
 
     protected:
         virtual std::tuple<bool, CBlockIndex*> acceptHeaders(
@@ -49,7 +49,6 @@ class DefaultHeaderProcessor : public BlockHeaderProcessor {
         ThinBlockManager& thinmg;
         BlockInFlightMarker& markAsInFlight;
         std::function<void()> checkBlockIndex;
-        std::function<void()> sendGetHeaders;
 };
 
 #endif

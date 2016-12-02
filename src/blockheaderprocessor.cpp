@@ -25,32 +25,15 @@ DefaultHeaderProcessor::DefaultHeaderProcessor(CNode* pfrom,
         InFlightIndex& i,
         ThinBlockManager& mg,
         BlockInFlightMarker& inFlight,
-        std::function<void()> checkBlockIndex,
-        std::function<void()> sendGetHeaders) :
+        std::function<void()> checkBlockIndex) :
     pfrom(pfrom), blocksInFlight(i), thinmg(mg), markAsInFlight(inFlight),
-    checkBlockIndex(checkBlockIndex), sendGetHeaders(sendGetHeaders)
+    checkBlockIndex(checkBlockIndex)
 {
 }
 
-// maybeAnnouncement: Header *might* have been received as a block announcement.
-bool DefaultHeaderProcessor::operator()(const std::vector<CBlockHeader>& headers,
-        bool peerSentMax,
-        bool maybeAnnouncement)
+bool DefaultHeaderProcessor::operator()(
+        const std::vector<CBlockHeader>& headers, bool peerSentMax)
 {
-    if (maybeAnnouncement && !headerConnects(headers.at(0)))
-    {
-        // Send a getheaders message in response to try to connect the chain.
-        // Once a headers message is received that is valid and does connect,
-        // nUnconnectingHeaders gets reset back to 0.
-        NodeStatePtr(pfrom->id)->unconnectingHeaders++;
-        sendGetHeaders();
-        UpdateBlockAvailability(pfrom->id, headers.back().GetHash());
-
-        if (NodeStatePtr(pfrom->id)->unconnectingHeaders % MAX_UNCONNECTING_HEADERS == 0)
-            Misbehaving(pfrom->id, 20);
-        return true;
-    }
-
     bool ok;
     CBlockIndex* pindexLast;
     std::tie(ok, pindexLast) = acceptHeaders(headers);
@@ -70,7 +53,11 @@ bool DefaultHeaderProcessor::operator()(const std::vector<CBlockHeader>& headers
         pfrom->PushMessage("getheaders", chainActive.GetLocator(pindexLast), uint256());
     }
 
-    if (pindexLast && maybeAnnouncement) {
+    if (pindexLast) {
+        // In case this header was processed as a part of an
+        // block announcement, check if there are more
+        // block candidates to download.
+
         std::vector<CBlockIndex*> toFetch = findMissingBlocks(pindexLast);
 
         // We may or may not start downloading the blocks
@@ -152,7 +139,7 @@ void DefaultHeaderProcessor::suggestDownload(const std::vector<CBlockIndex*>& to
 
         // Stop if we don't want to download this block now.
         // Won't want next.
-        if (!ann.onBlockAnnounced(toGet, true))
+        if (!ann.onBlockAnnounced(toGet))
             break;
 
         // This block has been requested from peer.
@@ -164,4 +151,28 @@ void DefaultHeaderProcessor::suggestDownload(const std::vector<CBlockIndex*>& to
                 last->GetBlockHash().ToString(), last->nHeight);
         pfrom->PushMessage("getdata", toGet);
     }
+}
+
+// If we have a header from a peer that does not connect
+// to our active chain, try to retrieve any missing to connect it.
+//
+// Return: If header request was needed. In this case,
+// the current header cannot be processed.
+bool DefaultHeaderProcessor::requestConnectHeaders(const CBlockHeader& h, CNode& from) {
+    UpdateBlockAvailability(from.id, h.GetHash());
+    if (headerConnects(h))
+        return false;
+
+    LogPrint("net", "Headers for %s do not connect. We don't have pprev %s peer=%d\n",
+            h.GetHash().ToString(), h.hashPrevBlock.ToString(), from.id);
+
+    NodeStatePtr(from.id)->unconnectingHeaders++;
+
+    from.PushMessage("getheaders",
+            chainActive.GetLocator(pindexBestHeader), uint256());
+
+    if (NodeStatePtr(from.id)->unconnectingHeaders % MAX_UNCONNECTING_HEADERS == 0)
+        Misbehaving(from.id, 20);
+
+    return true;
 }

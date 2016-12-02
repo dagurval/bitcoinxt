@@ -21,6 +21,7 @@ class ThinBlockBuilder;
 class ThinBlockWorker;
 class CTransaction;
 class ThinTx;
+class CNode;
 typedef int NodeId;
 
 // Call when a block is reassembled.
@@ -46,15 +47,18 @@ class ThinBlockManager : boost::noncopyable {
                 std::unique_ptr<InFlightEraser> inFlightEraser);
 
         void addWorker(const uint256& block, ThinBlockWorker& w);
-        void delWorker(ThinBlockWorker& w, NodeId);
+        void delWorker(const uint256& block, ThinBlockWorker& w);
         int numWorkers(const uint256& block) const;
 
-        void buildStub(const StubData&, const TxFinder& txFinder);
+        void buildStub(ThinBlockWorker& w, CNode& n, const StubData&, const TxFinder& txFinder);
         bool isStubBuilt(const uint256& block);
 
         bool addTx(const uint256& block, const CTransaction& tx);
         void removeIfExists(const uint256& block);
         std::vector<ThinTx> getTxsMissing(const uint256& block) const;
+
+        // public for unittest
+        void requestBlockAnnouncements(ThinBlockWorker& w, CNode& n);
 
     private:
         struct ActiveBuilder {
@@ -66,6 +70,8 @@ class ThinBlockManager : boost::noncopyable {
         std::unique_ptr<InFlightEraser> inFlightEraser;
 
         void finishBlock(const uint256& block, ThinBlockBuilder&);
+
+        std::vector<std::unique_ptr<class BlockAnnHandle> > announcers;
 };
 
 #endif

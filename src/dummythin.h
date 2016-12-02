@@ -13,16 +13,19 @@ class DummyThinWorker : public ThinBlockWorker {
         DummyThinWorker(ThinBlockManager& mg, NodeId id)
             : ThinBlockWorker(mg, id) { }
 
-        virtual bool addTx(const CTransaction& tx) { return false; }
+        bool addTxFirstBlock(const CTransaction& tx) override { return false; }
+        bool addTx(const uint256&, const CTransaction& tx) override { return false; }
 
-        virtual void setAvailable() { }
-        virtual bool isAvailable() const { return false; }
+        void buildStub(CNode& n, const StubData&, const TxFinder&) override { }
+        void addWork(const uint256& block) override { }
+        void stopWork(const uint256& block) override { }
+        void stopAllWork() override { }
 
-        virtual void buildStub(const StubData&, const TxFinder&) { }
-        virtual void setToWork(const uint256& block) { }
+        void requestBlock(const uint256& block,
+                std::vector<CInv>& getDataReq, CNode& node) override { }
 
-        virtual void requestBlock(const uint256& block,
-                std::vector<CInv>& getDataReq, CNode& node) { }
+        bool supportsParallel() const override { return false; }
+        bool isAvailable2() const override { return false; }
 
 };
 
