@@ -26,7 +26,7 @@ bool BlockProcessor::processHeader(const CBlockHeader& header) {
 
         std::vector<CBlockHeader> h(1, header);
 
-        if (!headerProcessor(h, false, false)) {
+        if (!headerProcessor(h, false)) {
             rejectBlock(header.GetHash(), "invalid header", 20);
             return false;
         }

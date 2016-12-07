@@ -1,4 +1,5 @@
 #include "compactblockprocessor.h"
+#include "blockheaderprocessor.h"
 #include "compactthin.h"
 #include "blockencodings.h"
 #include "thinblock.h"
@@ -30,6 +31,9 @@ void CompactBlockProcessor::operator()(CDataStream& vRecv, const CTxMemPool& mem
 
     CompactTxFinder txfinder(mempool,
             block.shorttxidk0, block.shorttxidk1);
+
+    if (headerProcessor.requestConnectHeaders(block.header, from))
+        return;
 
     processHeader(block.header);
 

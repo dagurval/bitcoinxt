@@ -27,6 +27,10 @@ void XThinBlockProcessor::operator()(
     catch (const std::invalid_argument& e) {
         rejectBlock(hash, e.what(), 20);
     }
+
+    if (headerProcessor.requestConnectHeaders(block.header, from))
+        return;
+
     processHeader(block.header);
 
     from.AddInventoryKnown(CInv(MSG_XTHINBLOCK, hash));

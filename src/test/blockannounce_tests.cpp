@@ -69,7 +69,6 @@ struct BlockAnnounceRecvFixture {
         nodestate(node.id)
     {
         SelectParams(CBaseChainParams::MAIN);
-        nodestate->initialHeadersReceived = true;
     }
 
     uint256 block;
@@ -96,12 +95,12 @@ BOOST_AUTO_TEST_CASE(announce_updates_availability) {
 
     std::vector<CInv> toFetch;
 
-    ann.onBlockAnnounced(toFetch, false);
+    ann.onBlockAnnounced(toFetch);
     BOOST_CHECK_EQUAL(1, ann.updateCalled);
 
     // Availability should also be called when we don't want block.
     DummyBlockIndexEntry entry(block); //< we have block (we don't want it)
-    ann.onBlockAnnounced(toFetch, false);
+    ann.onBlockAnnounced(toFetch);
     BOOST_CHECK_EQUAL(2, ann.updateCalled);
 }
 
@@ -109,14 +108,14 @@ BOOST_AUTO_TEST_CASE(fetch_when_wanted) {
 
     {   // We want block.
         std::vector<CInv> toFetch;
-        BOOST_CHECK(ann.onBlockAnnounced(toFetch, false));
+        BOOST_CHECK(ann.onBlockAnnounced(toFetch));
         BOOST_CHECK(!toFetch.empty());
     }
 
     {   // We have block (we don't want it)
         std::vector<CInv> toFetch;
         DummyBlockIndexEntry entry(block);
-        BOOST_CHECK(!ann.onBlockAnnounced(toFetch, false));
+        BOOST_CHECK(!ann.onBlockAnnounced(toFetch));
         BOOST_CHECK_EQUAL(0, toFetch.size());
     }
 }
@@ -171,19 +170,6 @@ BOOST_AUTO_TEST_CASE(dowl_strategy_full_now) {
             ann.pickDownloadStrategy());
 }
 
-BOOST_AUTO_TEST_CASE(downl_strategy_thin_later) {
-
-    // Node supports thin blocks, but we have not
-    // received any headers from node yet. We may not have
-    // caught up on its longest chain. Download thin later.
-    node.nServices = NODE_THIN;
-    nodestate->initialHeadersReceived = false;
-    BOOST_CHECK_EQUAL(
-            BlockAnnounceReceiver::DOWNL_THIN_LATER,
-            ann.pickDownloadStrategy());
-}
-
-
 BOOST_AUTO_TEST_CASE(dowl_strategy_thin_later_2) {
 
     // Thin supports sending thin blocks but is busy. Request later.
@@ -214,7 +200,6 @@ BOOST_AUTO_TEST_CASE(dowl_strategy_dont_downl_1) {
     // Put one node to work
     DummyNode node2(11, thinmg.get());
     NodeStatePtr state2(node2.id);
-    state2->initialHeadersReceived = true;
     state2->thinblock.reset(new XThinWorker(*thinmg, node2.id));
     state2->thinblock->setToWork(block);
     BOOST_CHECK_EQUAL(1, thinmg->numWorkers(block));
@@ -293,7 +278,7 @@ BOOST_AUTO_TEST_CASE(onannounced_downl_thin) {
     nodestate->thinblock.reset(worker); //<- takes ownership of ptr
 
     std::vector<CInv> r;
-    BOOST_CHECK(ann.onBlockAnnounced(r, false));
+    BOOST_CHECK(ann.onBlockAnnounced(r));
     BOOST_CHECK_EQUAL(1, worker->reqs);
 
     // thin blocks come with a header, we should not
@@ -308,7 +293,7 @@ BOOST_AUTO_TEST_CASE(onannounced_downl_full) {
     ann.overrideStrategy = BlockAnnounceReceiver::DOWNL_FULL_NOW;
 
     std::vector<CInv> toFetch;
-    BOOST_CHECK(ann.onBlockAnnounced(toFetch, false));
+    BOOST_CHECK(ann.onBlockAnnounced(toFetch));
     BOOST_CHECK_EQUAL(1, toFetch.size());
     BOOST_CHECK_EQUAL(block.ToString(), toFetch.at(0).hash.ToString());
 
@@ -326,7 +311,7 @@ BOOST_AUTO_TEST_CASE(onannounced_dont_downl) {
     nodestate->thinblock.reset(worker); //<- takes ownership of ptr
 
     std::vector<CInv> toFetch;
-    BOOST_CHECK(!ann.onBlockAnnounced(toFetch, false));
+    BOOST_CHECK(!ann.onBlockAnnounced(toFetch));
     BOOST_CHECK_EQUAL(0, worker->reqs);
     BOOST_CHECK_EQUAL(0, toFetch.size());
 
@@ -345,9 +330,7 @@ BOOST_AUTO_TEST_CASE(onannounced_dowl_thin_later) {
     nodestate->thinblock.reset(worker); //<- takes ownership of ptr
 
     std::vector<CInv> toFetch;
-    BOOST_CHECK(!ann.onBlockAnnounced(toFetch, false));
-    BOOST_CHECK_EQUAL(0, worker->reqs);
-    BOOST_CHECK_EQUAL(0, toFetch.size());
+    BOOST_CHECK(!ann.onBlockAnnounced(toFetch));
 
     // If we don't download, we should still ask for the header.
     BOOST_ASSERT(node.messages.size() > 0);

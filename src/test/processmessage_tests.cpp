@@ -36,9 +36,12 @@ struct DummyHeaderProcessor : public BlockHeaderProcessor {
 
     DummyHeaderProcessor() : headerOK(true), called(false) { }
 
-    bool operator()(const std::vector<CBlockHeader>&, bool, bool) override {
+    bool operator()(const std::vector<CBlockHeader>&, bool) override {
         called = true;
         return headerOK;
+    }
+    bool requestConnectHeaders(const CBlockHeader& h, CNode& from) override {
+        return false;
     }
     bool headerOK;
     bool called;
