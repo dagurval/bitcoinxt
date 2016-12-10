@@ -7,6 +7,7 @@
 #include <boost/noncopyable.hpp>
 #include "uint256.h"
 #include <stdexcept>
+#include <memory>
 
 class CNode;
 class CInv;
@@ -82,6 +83,13 @@ struct thinblock_error : public std::runtime_error {
     virtual ~thinblock_error() throw() { }
 };
 
+class BlockAnnHandle {
+    public:
+        virtual NodeId nodeID() const = 0;
+        virtual ~BlockAnnHandle() = 0;
+};
+inline BlockAnnHandle::~BlockAnnHandle() { }
+
 // Each peer we're connected to can work on one thin block
 // at a time. This keeps track of the thin block a peer is working on.
 class ThinBlockWorker : boost::noncopyable {
@@ -114,6 +122,14 @@ class ThinBlockWorker : boost::noncopyable {
         std::string blockStr() const;
 
         NodeId nodeID() const { return node; }
+
+        // Enables block announcements with thin blocks.
+        // Returns a RAII object that disables them on destruct.
+        // Returns nullptr if peer does ont support this.
+        virtual std::unique_ptr<BlockAnnHandle> requestBlockAnnouncements()
+        {
+            return nullptr;
+        }
 
     private:
         ThinBlockManager& mg;

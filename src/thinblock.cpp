@@ -131,7 +131,7 @@ ThinBlockWorker::~ThinBlockWorker() {
 
 void ThinBlockWorker::buildStub(const StubData& d, const TxFinder& f) {
     assert(d.header().GetHash() == block);
-    mg.buildStub(d, f);
+    mg.buildStub(*this, d, f);
 }
 
 bool ThinBlockWorker::isStubBuilt() const {

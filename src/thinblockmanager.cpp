@@ -5,6 +5,7 @@
 #include "thinblock.h"
 #include "thinblockbuilder.h"
 #include "util.h"
+#include <algorithm>
 
 ThinBlockManager::ThinBlockManager(
         std::unique_ptr<ThinBlockFinishedCallb> callb,
@@ -61,7 +62,7 @@ struct WrappedFinder : public TxFinder {
     const TxFinder& wrapped;
 };
 
-void ThinBlockManager::buildStub(const StubData& s, const TxFinder& txFinder)
+void ThinBlockManager::buildStub(ThinBlockWorker& w, const StubData& s, const TxFinder& txFinder)
 {
     uint256 h = s.header().GetHash();
     assert(builders.count(h));
@@ -91,6 +92,10 @@ void ThinBlockManager::buildStub(const StubData& s, const TxFinder& txFinder)
         WrappedFinder wfinder(s.missingProvided(), txFinder);
         builders[h].builder.reset(new ThinBlockBuilder(
             s.header(), s.allTransactions(), wfinder));
+
+        // Node was first to provide us
+        // a thin block. Select for block announcements with thin blocks.
+        requestBlockAnnouncements(w);
     }
 
     if (builders[h].builder->numTxsMissing() == 0)
@@ -186,3 +191,33 @@ void ThinBlockManager::finishBlock(const uint256& h, ThinBlockBuilder& builder) 
     removeIfExists(h);
 }
 
+// We ask for announcements with blocks from the
+// last 3 peers to provide a thin block first.
+void ThinBlockManager::requestBlockAnnouncements(ThinBlockWorker& w) {
+
+    typedef std::unique_ptr<BlockAnnHandle> annh;
+    auto it = std::find_if(
+            begin(announcers), end(announcers), [&w](const annh& h) {
+        return w.nodeID() == h->nodeID();
+    });
+
+    if (it != end(announcers)) {
+        // Already receiving announcements from peer.
+        // Move to the front.
+        std::rotate(it, it + 1, end(announcers));
+        return;
+    }
+
+    auto handle = w.requestBlockAnnouncements();
+    if (!bool(handle)) {
+        // Peer cannot provide block announcements
+        // with thin blocks.
+        return;
+    }
+
+    announcers.push_back(std::move(handle));
+
+    // Only request thin block announcements from 3 peers at a time.
+    if (announcers.size() > 3)
+        announcers.erase(begin(announcers));
+}
