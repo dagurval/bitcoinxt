@@ -60,7 +60,7 @@ struct BlockAnnWorker : public ThinBlockWorker {
         : ThinBlockWorker(m, i), announcers(a)
     {
     }
-    std::unique_ptr<BlockAnnHandle> requestBlockAnnouncements() override {
+    std::unique_ptr<BlockAnnHandle> requestBlockAnnouncements(CNode&) override {
         return std::unique_ptr<DummyAnn>(
                 new DummyAnn(nodeID(), announcers));
     }
@@ -75,13 +75,14 @@ BOOST_AUTO_TEST_CASE(request_block_announcements) {
 
     std::unique_ptr<ThinBlockManager> mg = GetDummyThinBlockMg();
     std::vector<NodeId> announcers;
+    DummyNode n;
 
     BlockAnnWorker w1(*mg, 11, announcers);
     BlockAnnWorker w2(*mg, 12, announcers);
     BlockAnnWorker w3(*mg, 13, announcers);
-    mg->requestBlockAnnouncements(w1);
-    mg->requestBlockAnnouncements(w2);
-    mg->requestBlockAnnouncements(w3);
+    mg->requestBlockAnnouncements(w1, n);
+    mg->requestBlockAnnouncements(w2, n);
+    mg->requestBlockAnnouncements(w3, n);
 
     // We want 3 block announcers, so all should have been kept.
     std::vector<NodeId> expected = { 11, 12, 13 };
@@ -90,11 +91,11 @@ BOOST_AUTO_TEST_CASE(request_block_announcements) {
         begin(expected), end(expected));
 
     // Move 11 to the front,
-    mg->requestBlockAnnouncements(w1);
+    mg->requestBlockAnnouncements(w1, n);
 
     // ...which means 14 should bump 12 out
     BlockAnnWorker w4(*mg, 14, announcers);
-    mg->requestBlockAnnouncements(w4);
+    mg->requestBlockAnnouncements(w4, n);
     expected = { 11, 13, 14 };
     BOOST_CHECK_EQUAL_COLLECTIONS(
         begin(announcers), end(announcers),
@@ -108,7 +109,7 @@ BOOST_AUTO_TEST_CASE(request_block_announcements) {
             std::vector<CInv>& getDataReq, CNode& node) override { }
     };
     DummyWorker w5(*mg, 15);
-    mg->requestBlockAnnouncements(w5);
+    mg->requestBlockAnnouncements(w5, n);
     BOOST_CHECK_EQUAL_COLLECTIONS(
         begin(announcers), end(announcers),
         begin(expected), end(expected));

@@ -104,7 +104,7 @@ class ThinBlockWorker : boost::noncopyable {
         virtual void setAvailable();
         virtual bool isAvailable() const;
 
-        virtual void buildStub(const StubData&, const TxFinder&);
+        virtual void buildStub(CNode& n, const StubData&, const TxFinder&);
         virtual bool isStubBuilt() const;
         virtual void setToWork(const uint256& block);
         virtual bool isOnlyWorker() const;
@@ -126,7 +126,7 @@ class ThinBlockWorker : boost::noncopyable {
         // Enables block announcements with thin blocks.
         // Returns a RAII object that disables them on destruct.
         // Returns nullptr if peer does ont support this.
-        virtual std::unique_ptr<BlockAnnHandle> requestBlockAnnouncements()
+        virtual std::unique_ptr<BlockAnnHandle> requestBlockAnnouncements(CNode&)
         {
             return nullptr;
         }

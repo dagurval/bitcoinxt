@@ -21,6 +21,7 @@ class ThinBlockBuilder;
 class ThinBlockWorker;
 class CTransaction;
 class ThinTx;
+class CNode;
 typedef int NodeId;
 
 // Call when a block is reassembled.
@@ -49,7 +50,7 @@ class ThinBlockManager : boost::noncopyable {
         void delWorker(ThinBlockWorker& w, NodeId);
         int numWorkers(const uint256& block) const;
 
-        void buildStub(ThinBlockWorker& w, const StubData&, const TxFinder& txFinder);
+        void buildStub(ThinBlockWorker& w, CNode& n, const StubData&, const TxFinder& txFinder);
         bool isStubBuilt(const uint256& block);
 
         bool addTx(const uint256& block, const CTransaction& tx);
@@ -57,7 +58,7 @@ class ThinBlockManager : boost::noncopyable {
         std::vector<ThinTx> getTxsMissing(const uint256& block) const;
 
         // public for unittest
-        void requestBlockAnnouncements(ThinBlockWorker& w);
+        void requestBlockAnnouncements(ThinBlockWorker& w, CNode& n);
 
     private:
         struct ActiveBuilder {

@@ -22,10 +22,10 @@ struct DummyWorker : public WORKER_TYPE {
         WORKER_TYPE(m, i), isBuilt(false), buildStubCalled(false)
     { }
 
-    virtual void buildStub(const StubData&, const TxFinder&) {
+    void buildStub(CNode&, const StubData&, const TxFinder&) override {
         buildStubCalled = true;
     }
-    virtual bool isStubBuilt() const {
+    bool isStubBuilt() const override {
         return isBuilt;
     }
     bool isBuilt;

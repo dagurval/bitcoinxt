@@ -77,7 +77,7 @@ void ProcessMerkleBlock(CNode& pfrom, CDataStream& vRecv,
     // Now attempt to reconstruct the block from the state of our memory pool.
     try {
         ThinBloomStub stubData(merkleBlock);
-        worker.buildStub(stubData, txfinder);
+        worker.buildStub(pfrom, stubData, txfinder);
         SendPing(pfrom, hash);
     }
     catch (const thinblock_error& e) {

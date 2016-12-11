@@ -114,7 +114,7 @@ BOOST_AUTO_TEST_CASE(rerequest_success) {
     BloomThinWorker worker(tmgr, 42);
     pfrom.thinBlockNonceBlock = mblock.header.GetHash();
     worker.setToWork(mblock.header.GetHash());
-    worker.buildStub(ThinBloomStub(mblock), NullFinder());
+    worker.buildStub(pfrom, ThinBloomStub(mblock), NullFinder());
     BOOST_CHECK(!worker.isReRequesting());
 
     DummyBloomConcluder c;
@@ -144,7 +144,7 @@ BOOST_AUTO_TEST_CASE(re_request_not_fulfilled_one_worker) {
 
     BloomThinWorker worker(tmgr, 42);
     worker.setToWork(mblock.header.GetHash());
-    worker.buildStub(ThinBloomStub(mblock), NullFinder());
+    worker.buildStub(pfrom, ThinBloomStub(mblock), NullFinder());
     worker.setReRequesting(true);
     pfrom.thinBlockNonceBlock = mblock.header.GetHash();
 
@@ -168,7 +168,7 @@ BOOST_AUTO_TEST_CASE(re_request_not_fulfilled_multiple_workers) {
     BloomThinWorker worker2(tmgr, 24);
     worker1.setToWork(mblock.header.GetHash());
     worker2.setToWork(mblock.header.GetHash());
-    worker1.buildStub(ThinBloomStub(mblock), NullFinder());
+    worker1.buildStub(pfrom, ThinBloomStub(mblock), NullFinder());
     worker1.setReRequesting(true);
     worker2.setReRequesting(true);
     pfrom.thinBlockNonceBlock = mblock.header.GetHash();

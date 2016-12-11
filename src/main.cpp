@@ -4908,10 +4908,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             //
             // This also acts as announcement to tell the peer that we
             // support compact blocks.
-
-            bool highBandwidth = false;
-            uint64_t version = 1;
-            pfrom->PushMessage("sendcmpct", highBandwidth, version);
+            enableCompactBlocks(*pfrom, false);
         }
     }
 

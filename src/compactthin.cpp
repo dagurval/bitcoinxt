@@ -4,6 +4,8 @@
 
 #include "compactthin.h"
 #include "protocol.h"
+#include "net.h"
+#include "util.h"
 #include <sstream>
 
 CompactWorker::CompactWorker(ThinBlockManager& m, NodeId n) :
@@ -15,6 +17,26 @@ void CompactWorker::requestBlock(const uint256& block,
         std::vector<CInv>& getDataReq, CNode& node) {
 
     getDataReq.push_back(CInv(MSG_CMPCT_BLOCK, block));
+}
+
+class CompactAnn : public BlockAnnHandle {
+    public:
+        CompactAnn(CNode& n) : n(n) {
+            LogPrint("ann", "requesting compact block announcements"
+                    "from peer=%d", n.id);
+            enableCompactBlocks(n, true);
+        }
+        ~CompactAnn() {
+            LogPrint("ann", "un-requesting compact block announcements"
+                    "from peer=%d", n.id);
+            enableCompactBlocks(n, false);
+        }
+        NodeId nodeID() const override { return n.id; }
+        CNode& n;
+};
+
+std::unique_ptr<BlockAnnHandle> CompactWorker::requestBlockAnnouncements(CNode& n) {
+    return std::unique_ptr<BlockAnnHandle>(new CompactAnn(n));
 }
 
 std::vector<ThinTx> CompactStub::allTransactions() const {
@@ -48,4 +70,9 @@ std::vector<ThinTx> CompactStub::allTransactions() const {
         throw thinblock_error(err.str());
     }
     return all;
+}
+
+void enableCompactBlocks(CNode& node, bool highBandwidth) {
+    uint64_t version = 1;
+    node.PushMessage("sendcmpct", highBandwidth, version);
 }
