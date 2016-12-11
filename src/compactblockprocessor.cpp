@@ -29,18 +29,18 @@ void CompactBlockProcessor::operator()(CDataStream& vRecv, const CTxMemPool& mem
         return;
     }
 
-    CompactTxFinder txfinder(mempool,
-            block.shorttxidk0, block.shorttxidk1);
-
     if (headerProcessor.requestConnectHeaders(block.header, from))
+        return;
+
+    if (!setToWork(hash))
         return;
 
     processHeader(block.header);
 
     from.AddInventoryKnown(CInv(MSG_CMPCT_BLOCK, hash));
 
-    if (!setToWork(hash))
-        return;
+    CompactTxFinder txfinder(mempool,
+            block.shorttxidk0, block.shorttxidk1);
 
     std::unique_ptr<CompactStub> stub;
     try {

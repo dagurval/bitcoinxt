@@ -31,12 +31,12 @@ void XThinBlockProcessor::operator()(
     if (headerProcessor.requestConnectHeaders(block.header, from))
         return;
 
+    if (!setToWork(hash))
+        return;
+
     processHeader(block.header);
 
     from.AddInventoryKnown(CInv(MSG_XTHINBLOCK, hash));
-
-    if (!setToWork(hash))
-        return;
 
     try {
         XThinStub stub(block);
