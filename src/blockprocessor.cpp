@@ -45,19 +45,21 @@ bool BlockProcessor::setToWork(const uint256& hash) {
 
     if (worker.isAvailable()) {
         // Happens if:
+        // * This is a block announce,enet (using thin blocks)
         // * We did not request block.
         // * We already received block (after requesting it) and
-        //    found it to be invalid.
-        LogPrint("thin", "ignoring %s %s that peer is not working "
-                "on peer=%d\n", netcmd, hash.ToString(), from.id);
-        return false;
+        //   found it to be invalid.
+        //
+        // We assume it is a block announcement
+        LogPrint("thin", "received %s %s that was not requested (anouncement?) peer=%d\n",
+                netcmd, hash.ToString(), from.id);
     }
 
     if (worker.blockHash() != hash) {
-        LogPrint("thin", "ignoring %s %s from peer=%d, "
-                "expecting block %s\n",
-		    netcmd, hash.ToString(), from.id, worker.blockStr());
-        return false;
+        LogPrint("thin", "switching %s to %s (was "
+                "expecting block %s) peer=%d\n",
+		    netcmd, hash.ToString(), worker.blockStr(), from.id);
     }
+    worker.setToWork(hash);
     return true;
 }

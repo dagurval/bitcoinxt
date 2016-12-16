@@ -23,12 +23,12 @@ class CompactAnn : public BlockAnnHandle {
     public:
         CompactAnn(CNode& n) : n(n) {
             LogPrint("ann", "requesting compact block announcements"
-                    "from peer=%d", n.id);
+                    "from peer=%d\n", n.id);
             enableCompactBlocks(n, true);
         }
         ~CompactAnn() {
             LogPrint("ann", "un-requesting compact block announcements"
-                    "from peer=%d", n.id);
+                    "from peer=%d\n", n.id);
             enableCompactBlocks(n, false);
         }
         NodeId nodeID() const override { return n.id; }
