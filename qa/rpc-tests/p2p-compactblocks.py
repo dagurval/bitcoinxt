@@ -46,12 +46,14 @@ class TestNode(SingleNodeConnCB):
 
     def on_cmpctblock(self, conn, message):
         self.last_cmpctblock = message
+        print("compactblock announced")
         self.block_announced = True
         self.last_cmpctblock.header_and_shortids.header.calc_sha256()
         self.set_announced_blockhashes.add(self.last_cmpctblock.header_and_shortids.header.sha256)
 
     def on_headers(self, conn, message):
         self.last_headers = message
+        print("header announced")
         self.block_announced = True
         for x in self.last_headers.headers:
             x.calc_sha256()
@@ -61,6 +63,7 @@ class TestNode(SingleNodeConnCB):
         self.last_inv = message
         for x in self.last_inv.inv:
             if x.type == 2:
+                print("inv announced")
                 self.block_announced = True
                 self.set_announced_blockhashes.add(x.hash)
 
@@ -128,6 +131,8 @@ class CompactBlocksTest(BitcoinTestFramework):
                 [["-prefer-compact-blocks", "-debug", "-logtimemicros=1", "-bip9params=segwit:0:0"],
                  ["-prefer-compact-blocks", "-debug", "-logtimemicros", "-txindex"]])
         connect_nodes(self.nodes[0], 1)
+        import time
+        #time.sleep(60)
 
     def build_block_on_tip(self, node, segwit=False):
         height = node.getblockcount()
@@ -175,6 +180,12 @@ class CompactBlocksTest(BitcoinTestFramework):
     # If old_node is passed in, request compact blocks with version=preferred-1
     # and verify that it receives block announcements via compact block.
     def test_sendcmpct(self, node, test_node, preferred_version, old_node=None):
+
+        if XT_TWEAK:
+            # We never prefer segwit.
+            print("XT Tweak: Changing preferred version from 2 (segwit) to 1 (normal)")
+            preferred_version = 1
+
         # Make sure we get a SENDCMPCT message from our peer
         def received_sendcmpct():
             return (len(test_node.last_sendcmpct) > 0)
@@ -262,6 +273,8 @@ class CompactBlocksTest(BitcoinTestFramework):
             # Verify that a peer using an older protocol version can receive
             # announcements from this node.
             sendcmpct.version = preferred_version-1
+            if XT_TWEAK:
+                sendcmpct.version = 1
             sendcmpct.announce = True
             old_node.send_and_ping(sendcmpct)
             # Header sync
@@ -285,6 +298,13 @@ class CompactBlocksTest(BitcoinTestFramework):
     # Compare the generated shortids to what we expect based on BIP 152, given
     # bitcoind's choice of nonce.
     def test_compactblock_construction(self, node, test_node, version, use_witness_address):
+
+        if XT_TWEAK:
+            if version == 2:
+                version = 1
+            if use_witness_address:
+                use_witness_address = False
+
         # Generate a bunch of transactions.
         node.generate(101)
         num_transactions = 25
@@ -302,14 +322,19 @@ class CompactBlocksTest(BitcoinTestFramework):
             txid = node.sendtoaddress(address, 0.1)
             hex_tx = node.gettransaction(txid)["hex"]
             tx = FromHex(CTransaction(), hex_tx)
-            #if not tx.wit.is_null():
-                #segwit_tx_generated = True
+
+            if XT_TWEAK:
+                continue
+
+            if not tx.wit.is_null():
+                segwit_tx_generated = True
 
         if use_witness_address:
             assert(segwit_tx_generated) # check that our test is not broken
 
         # Wait until we've seen the block announcement for the resulting tip
         tip = int(node.getbestblockhash(), 16)
+        print("Waiting for tip " + str(tip))
         assert(test_node.wait_for_block_announcement(tip))
 
         # Now mine a block, and look at the resulting compact block.
@@ -396,6 +421,12 @@ class CompactBlocksTest(BitcoinTestFramework):
     def test_compactblock_requests(self, node, test_node, version, segwit):
         # Try announcing a block with an inv or header, expect a compactblock
         # request
+
+        if XT_TWEAK:
+            if version == 2:
+                print("XT Tweak: Change version from 2 to 1. Never use segwit version.")
+                version = 1
+
         for announce in ["inv", "header"]:
             block = self.build_block_on_tip(node, segwit=segwit)
             with mininode_lock:
@@ -462,6 +493,12 @@ class CompactBlocksTest(BitcoinTestFramework):
     # node needs, and that responding to them causes the block to be
     # reconstructed.
     def test_getblocktxn_requests(self, node, test_node, version):
+
+        if XT_TWEAK:
+            if version == 2:
+                print("XT Tweak: Change version from 2 to 1. Never use segwit version.")
+                version = 1
+
         with_witness = (version==2)
 
         def test_getblocktxn_response(compact_block, peer, expected_result):
@@ -545,6 +582,12 @@ class CompactBlocksTest(BitcoinTestFramework):
     # Incorrectly responding to a getblocktxn shouldn't cause the block to be
     # permanently failed.
     def test_incorrect_blocktxn_response(self, node, test_node, version):
+
+        if XT_TWEAK:
+            if version == 2:
+                print("XT Tweak: Change version from 2 to 1. Never use segwit version.")
+                version = 1
+
         if (len(self.utxos) == 0):
             self.make_utxos()
         utxo = self.utxos.pop(0)
@@ -658,7 +701,7 @@ class CompactBlocksTest(BitcoinTestFramework):
         # Test that requesting old compactblocks doesn't work.
         MAX_CMPCTBLOCK_DEPTH = 5
         new_blocks = []
-        for i in range(MAX_CMPCTBLOCK_DEPTH + 1):
+        for i in xrange(MAX_CMPCTBLOCK_DEPTH + 1):
             test_node.clear_block_announcement()
             new_blocks.append(node.generate(1)[0])
             wait_until(test_node.received_block_announcement, timeout=30)
@@ -713,7 +756,8 @@ class CompactBlocksTest(BitcoinTestFramework):
 
     def activate_segwit(self, node):
         node.generate(144*3)
-        assert_equal(get_bip9_status(node, "segwit")["status"], 'active')
+        if not XT_TWEAK:
+            assert_equal(get_bip9_status(node, "segwit")["status"], 'active')
 
     def test_end_to_end_block_relay(self, node, listeners):
         utxo = self.utxos.pop(0)
@@ -727,9 +771,14 @@ class CompactBlocksTest(BitcoinTestFramework):
         node.submitblock(ToHex(block))
 
         for l in listeners:
+            print(str(l))
             wait_until(lambda: l.received_block_announcement(), timeout=30)
+            print("received block announcement")
         with mininode_lock:
             for l in listeners:
+                print("last_cmpctblock " + str(l.last_cmpctblock)
+                        + " headers " + str(l.last_headers)
+                        + " inv " + str(l.last_inv))
                 assert(l.last_cmpctblock is not None)
                 l.last_cmpctblock.header_and_shortids.header.calc_sha256()
                 assert_equal(l.last_cmpctblock.header_and_shortids.header.sha256, block.sha256)
@@ -764,6 +813,10 @@ class CompactBlocksTest(BitcoinTestFramework):
     # Helper for enabling cb announcements
     # Send the sendcmpct request and sync headers
     def request_cb_announcements(self, peer, node, version):
+
+        if XT_TWEAK and version == 2:
+            version = 1
+
         tip = node.getbestblockhash()
         peer.get_headers(locator=[int(tip, 16)], hashstop=0)
 
