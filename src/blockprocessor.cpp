@@ -19,7 +19,7 @@ void BlockProcessor::rejectBlock(
     from.PushMessage("reject", netcmd, REJECT_MALFORMED, reason, block);
 
     this->misbehave(misbehave);
-    worker.setAvailable();
+    worker.stopWork(block);
 }
 
 bool BlockProcessor::processHeader(const CBlockHeader& header) {
@@ -27,6 +27,7 @@ bool BlockProcessor::processHeader(const CBlockHeader& header) {
         std::vector<CBlockHeader> h(1, header);
 
         if (!headerProcessor(h, false)) {
+            worker.stopWork(header.GetHash());
             rejectBlock(header.GetHash(), "invalid header", 20);
             return false;
         }
@@ -39,27 +40,42 @@ bool BlockProcessor::setToWork(const uint256& hash) {
         LogPrint("thin", "already had block %s, "
                 "ignoring %s peer=%d\n",
             hash.ToString(), netcmd, from.id);
-        worker.setAvailable();
+        worker.stopWork(hash);
 	    return false;
     }
 
-    if (worker.isAvailable()) {
+    if (!worker.isWorkingOn(hash)) {
         // Happens if:
-        // * This is a block announce,enet (using thin blocks)
-        // * We did not request block.
+        // * This is a block announcemenet (we did not request this block)
         // * We already received block (after requesting it) and
         //   found it to be invalid.
-        //
-        // We assume it is a block announcement
-        LogPrint("thin", "received %s %s that was not requested (anouncement?) peer=%d\n",
-                netcmd, hash.ToString(), from.id);
-    }
 
-    if (worker.blockHash() != hash) {
-        LogPrint("thin", "switching %s to %s (was "
-                "expecting block %s) peer=%d\n",
-		    netcmd, hash.ToString(), worker.blockStr(), from.id);
+        if (!worker.supportsParallel()) {
+            // Worker cannot support block announcements
+            LogPrint("thin", "ignoring %s %s, "
+                    "expecting another block peer=%d\n",
+                    netcmd, hash.ToString(), from.id);
+            return false;
+        }
+
+        LogPrint("thin", "received %s %s announcement peer=%d\n",
+                netcmd, hash.ToString(), from.id);
+        worker.addWork(hash);
     }
-    worker.setToWork(hash);
     return true;
 }
+
+bool BlockProcessor::requestConnectHeaders(const CBlockHeader& header) {
+    bool needPrevHeaders = headerProcessor.requestConnectHeaders(header, from);
+
+    if (needPrevHeaders) {
+        // We don't have previous block. We can't connect it to the chain.
+        // Ditch it. We will re-request it later if we see that we still want it.
+        LogPrint("thin", "Can't connect block %s. We don't have prev. Ignoring it peer=%d.\n",
+                header.GetHash().ToString(), from.id);
+
+        worker.stopWork(header.GetHash());
+    }
+    return needPrevHeaders;
+}
+

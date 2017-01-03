@@ -27,6 +27,7 @@ class BlockProcessor {
         ThinBlockWorker& worker;
         virtual void misbehave(int howmuch);
         BlockHeaderProcessor& headerProcessor;
+        bool requestConnectHeaders(const CBlockHeader&);
 
     private:
         std::string netcmd;

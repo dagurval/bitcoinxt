@@ -32,8 +32,9 @@ struct BloomBlockConcluder {
             uint64_t nonce, ThinBlockWorker& thinblock);
 
     protected:
-        virtual void giveUp(CNode* pfrom, ThinBlockWorker& worker);
+        virtual void giveUp(const uint256& block, CNode* pfrom, ThinBlockWorker&);
         virtual void reRequest(
+            const uint256& block,
             CNode* pfrom,
             ThinBlockWorker& worker,
             uint64_t nonce);

@@ -53,6 +53,14 @@ bool BlockAnnounceReceiver::almostSynced() {
 
 BlockAnnounceReceiver::DownloadStrategy BlockAnnounceReceiver::pickDownloadStrategy() {
 
+    NodeStatePtr nodestate(from.id);
+    if (nodestate->thinblock->isWorkingOn(block))
+    {
+        // This block announcement was bundled
+        // with a thin block.
+        return DONT_DOWNL;
+    }
+
     if (!almostSynced())
         return DONT_DOWNL;
 
@@ -64,7 +72,6 @@ BlockAnnounceReceiver::DownloadStrategy BlockAnnounceReceiver::pickDownloadStrat
         if (blocksInFlight.isInFlight(block))
             return DONT_DOWNL;
 
-        NodeStatePtr nodestate(from.id);
         if (nodestate->nBlocksInFlight >= MAX_BLOCKS_IN_TRANSIT_PER_PEER)
             return DONT_DOWNL;
 
@@ -88,9 +95,9 @@ BlockAnnounceReceiver::DownloadStrategy BlockAnnounceReceiver::pickDownloadStrat
         return DONT_DOWNL;
     }
 
-    if (!state->thinblock->isAvailable()) {
-        LogPrint("thin", "peer %d is busy with %s, won't req %s\n",
-                from.id, state->thinblock->blockStr(), block.ToString());
+    if (!state->thinblock->isAvailable2()) {
+        LogPrint("thin", "peer busy, won't req %s peer=%d\n",
+                block.ToString(), from.id);
         return DOWNL_THIN_LATER;
     }
     return DOWNL_THIN_NOW;
@@ -120,7 +127,7 @@ bool BlockAnnounceReceiver::onBlockAnnounced(std::vector<CInv>& toFetch) {
             block.ToString(), from.id, (numDownloading + 1), Opt().ThinBlocksMaxParallel());
 
         nodestate->thinblock->requestBlock(block, toFetch, from);
-        nodestate->thinblock->setToWork(block);
+        nodestate->thinblock->addWork(block);
         return true;
     }
 
@@ -264,6 +271,12 @@ void BlockAnnounceSender::announceWithBlock(BlockSender& sender) {
     uint256 hash = to.blocksToAnnounce[0];
     CBlockIndex* block = mapBlockIndex.find(hash)->second;
 
+    if (peerHasHeader(block)) {
+        // peer may have announced this block
+        // to us.
+        return;
+    }
+
     sender.sendBlock(to, *block, MSG_CMPCT_BLOCK, block->nHeight);
     updateBestHeaderSent(to, block);
 
@@ -291,7 +304,7 @@ void BlockAnnounceSender::announce() {
             announced = true;
         }
 
-        if (node->prefersHeaders && canAnnounceWithHeaders())
+        else if (node->prefersHeaders && canAnnounceWithHeaders())
             announced = announceWithHeaders();
 
         if (!announced)

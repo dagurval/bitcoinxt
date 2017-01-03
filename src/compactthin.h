@@ -22,6 +22,8 @@ class CompactWorker : public ThinBlockWorker {
                 std::vector<CInv>& getDataReq, CNode& node) override;
 
         std::unique_ptr<BlockAnnHandle> requestBlockAnnouncements(CNode& n) override;
+
+        bool supportsParallel() const override { return true; }
 };
 
 

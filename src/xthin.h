@@ -62,6 +62,8 @@ class XThinWorker : public ThinBlockWorker {
         void requestBlock(const uint256& block,
                 std::vector<CInv>& getDataReq, CNode& node) override;
 
+        bool supportsParallel() const override { return true; }
+
     private:
         std::unique_ptr<struct TxHashProvider> HashProvider;
 

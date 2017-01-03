@@ -47,7 +47,7 @@ class ThinBlockManager : boost::noncopyable {
                 std::unique_ptr<InFlightEraser> inFlightEraser);
 
         void addWorker(const uint256& block, ThinBlockWorker& w);
-        void delWorker(ThinBlockWorker& w, NodeId);
+        void delWorker(const uint256& block, ThinBlockWorker& w);
         int numWorkers(const uint256& block) const;
 
         void buildStub(ThinBlockWorker& w, CNode& n, const StubData&, const TxFinder& txFinder);

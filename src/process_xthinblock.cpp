@@ -25,16 +25,19 @@ void XThinBlockProcessor::operator()(
         block.selfValidate();
     }
     catch (const std::invalid_argument& e) {
+        LogPrint("thin", "Invalid xthin block %s\n", e.what());
         rejectBlock(hash, e.what(), 20);
+        return;
     }
 
-    if (headerProcessor.requestConnectHeaders(block.header, from))
+    if (requestConnectHeaders(block.header))
         return;
 
     if (!setToWork(hash))
         return;
 
-    processHeader(block.header);
+    if (!processHeader(block.header))
+        return;
 
     from.AddInventoryKnown(CInv(MSG_XTHINBLOCK, hash));
 
@@ -47,13 +50,14 @@ void XThinBlockProcessor::operator()(
         return;
     }
 
-    // If the stub was enough to finish the block then
-    // the worker will be available.
-    if (worker.isAvailable())
+    if (!worker.isWorkingOn(hash)) {
+        // Stub had enough data to finish
+        // the block.
         return;
+    }
 
     // Request missing
-    std::vector<ThinTx> missing = worker.getTxsMissing();
+    std::vector<ThinTx> missing = worker.getTxsMissing(hash);
     assert(!missing.empty());
 
     XThinReRequest req;

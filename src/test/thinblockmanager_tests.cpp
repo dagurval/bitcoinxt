@@ -6,6 +6,7 @@
 #include "thinblockmanager.h"
 #include "uint256.h"
 #include "xthin.h"
+#include "compactthin.h"
 #include "chainparams.h"
 #include <memory>
 #include <iostream>
@@ -26,13 +27,13 @@ BOOST_AUTO_TEST_CASE(add_and_del_worker) {
 
     // Assigning a worker to a block adds it to the manager.
     uint256 block = uint256S("0xFF");
-    worker->setToWork(block);
+    worker->addWork(block);
     BOOST_CHECK_EQUAL(1, mg->numWorkers(block));
 
-    worker->setAvailable();
+    worker->stopWork(block);
     BOOST_CHECK_EQUAL(0, mg->numWorkers(block));
 
-    worker->setToWork(block);
+    worker->addWork(block);
     worker.reset();
     BOOST_CHECK_EQUAL(0, mg->numWorkers(block));
 };
@@ -66,6 +67,10 @@ struct BlockAnnWorker : public ThinBlockWorker {
     }
     void requestBlock(const uint256& block,
         std::vector<CInv>& getDataReq, CNode& node) override { }
+
+    bool supportsParallel() const override {
+        return true;
+    }
 
     std::vector<NodeId>& announcers;
 };
@@ -107,12 +112,38 @@ BOOST_AUTO_TEST_CASE(request_block_announcements) {
         DummyWorker(ThinBlockManager& m, NodeId i) : ThinBlockWorker(m, i) { }
         void requestBlock(const uint256& block,
             std::vector<CInv>& getDataReq, CNode& node) override { }
+        bool supportsParallel() const override { return false; }
     };
     DummyWorker w5(*mg, 15);
     mg->requestBlockAnnouncements(w5, n);
     BOOST_CHECK_EQUAL_COLLECTIONS(
         begin(announcers), end(announcers),
         begin(expected), end(expected));
+}
+
+BOOST_AUTO_TEST_CASE(add_and_delete_workers) {
+    std::unique_ptr<ThinBlockManager> mg = GetDummyThinBlockMg();
+
+    CompactWorker w1(*mg, 42);
+    XThinWorker w2(*mg, 43);
+
+    uint256 blockA = uint256S("0xf00");
+    uint256 blockB = uint256S("0xbaa");
+
+    mg->addWorker(blockA, w1);
+    mg->addWorker(blockB, w1);
+    mg->addWorker(blockA, w2);
+
+    BOOST_CHECK_EQUAL(2, mg->numWorkers(blockA));
+    BOOST_CHECK_EQUAL(1, mg->numWorkers(blockB));
+
+    mg->delWorker(blockA, w1);
+    BOOST_CHECK_EQUAL(1, mg->numWorkers(blockA));
+
+    mg->delWorker(blockA, w2);
+    mg->delWorker(blockB, w1);
+    BOOST_CHECK_EQUAL(0, mg->numWorkers(blockA));
+    BOOST_CHECK_EQUAL(0, mg->numWorkers(blockB));
 }
 
 BOOST_AUTO_TEST_SUITE_END();

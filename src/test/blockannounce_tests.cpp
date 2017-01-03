@@ -177,7 +177,7 @@ BOOST_AUTO_TEST_CASE(dowl_strategy_thin_later_2) {
 
     // By default DummyNode uses DummyThinWorker.
     // DummyThinWorker always returns false for isAvailable().
-    BOOST_ASSERT(!nodestate->thinblock->isAvailable());
+    BOOST_ASSERT(!nodestate->thinblock->isAvailable2());
 
 
     BOOST_CHECK_EQUAL(
@@ -201,7 +201,7 @@ BOOST_AUTO_TEST_CASE(dowl_strategy_dont_downl_1) {
     DummyNode node2(11, thinmg.get());
     NodeStatePtr state2(node2.id);
     state2->thinblock.reset(new XThinWorker(*thinmg, node2.id));
-    state2->thinblock->setToWork(block);
+    state2->thinblock->addWork(block);
     BOOST_CHECK_EQUAL(1, thinmg->numWorkers(block));
 
     // Second one should not attempt to download on announcement.
@@ -251,6 +251,37 @@ BOOST_AUTO_TEST_CASE(dowl_strategy_dont_dowl_5) {
     auto argraii = SetDummyArgGetter(std::unique_ptr<ArgGetter>(arg));
     arg->usethin = 3; // xthin only, avoid full blocks
 
+    BOOST_CHECK_EQUAL(BlockAnnounceReceiver::DONT_DOWNL,
+            ann.pickDownloadStrategy());
+}
+
+// // Unfortunately nodestate is shared across tests,
+// // so we need to set it back.
+// struct RestoreState {
+//     RestoreState(NodeStatePtr& s) : s(s), old(s->thinblock) { }
+//     ~RestoreState() { s->thinblock = old; }
+//
+//     NodeStatePtr& s;
+//     std::shared_ptr<ThinBlockWorker> old;
+// };
+
+BOOST_AUTO_TEST_CASE(dowl_strategy_dont_dowl_6) {
+    // Node is already providing block
+    // as part of the announcement
+
+    class AlwaysWorkingOn : public DummyThinWorker {
+        public:
+            AlwaysWorkingOn(ThinBlockManager& mg, NodeId id)
+                : DummyThinWorker(mg, id) { }
+
+            bool isWorkingOn(const uint256&) const override {
+                return true;
+            }
+    };
+
+    //RestoreState restoreRAII(nodestate);
+
+    nodestate->thinblock.reset(new AlwaysWorkingOn{*thinmg, node.id});
     BOOST_CHECK_EQUAL(BlockAnnounceReceiver::DONT_DOWNL,
             ann.pickDownloadStrategy());
 }

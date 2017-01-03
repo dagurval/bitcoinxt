@@ -483,8 +483,10 @@ void OnBlockFinished::operator()(const CBlock& block, const std::vector<NodeId>&
     AssertLockHeld(cs_main);
     CBlock copy(block);
     CValidationState state;
-    ProcessNewBlock(state, pickBlockSource(ids), &copy,
-            hasWhitelistedNode(ids), NULL);
+    if (!ProcessNewBlock(state, pickBlockSource(ids), &copy,
+            hasWhitelistedNode(ids), NULL)) {
+        LogPrintf("ProcessNewBlock failed in %s\n", __func__);
+    }
     updateRecentTxs(block, ids);
     rejectAndPunish(state, block.GetHash(), ids);
 }
@@ -3498,6 +3500,8 @@ bool AcceptBlock(CBlock& block, CValidationState& state, CBlockIndex** ppindex, 
     bool fAlreadyHave = pindex->nStatus & BLOCK_HAVE_DATA;
     bool fHasMoreWork = (chainActive.Tip() ? pindex->nChainWork > chainActive.Tip()->nChainWork : true);
 
+    LogPrintf("Acceptblock - already have %d, requested %d, hasmorework %d, previously pruned %d\n",
+            fAlreadyHave, fRequested, fHasMoreWork, pindex->nTx != 0);
     // TODO: deal better with return value and error conditions for duplicate
     // and unrequested blocks.
     if (fAlreadyHave) return true;
@@ -3536,6 +3540,7 @@ bool AcceptBlock(CBlock& block, CValidationState& state, CBlockIndex** ppindex, 
     if (fCheckForPruning)
         FlushStateToDisk(state, FLUSH_STATE_NONE); // we just allocated more disk space for block files
 
+    LogPrintf("AcceptBlock return true\n");
     return true;
 }
 
@@ -3555,6 +3560,7 @@ static bool IsSuperMajority(int versionOrBitmask, const CBlockIndex* pstart, uns
 
 bool ProcessNewBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, bool fForceProcessing, CDiskBlockPos *dbp)
 {
+    LogPrintf("ProcessNewBlock start\n");
     // Preliminary checks
     bool checked = CheckBlock(*pblock, state);
 
@@ -3580,6 +3586,7 @@ bool ProcessNewBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, bool
     if (!ActivateBestChain(state, pblock))
         return error("%s: ActivateBestChain failed", __func__);
 
+    LogPrintf("ProcessNewBlock exit\n");
     return true;
 }
 
@@ -4713,6 +4720,16 @@ struct MempoolHashProvider : public TxHashProvider {
     }
 };
 
+void unexpectedThinError(const std::string& cmd, CNode& from, const std::string& err) {
+    LogPrintf("Unexpected error receiving %s peer=%d\n", cmd, from.id);
+    {
+        LOCK(cs_main);
+        NodeStatePtr(from.id)->thinblock->stopAllWork();
+        Misbehaving(from.id, 10);
+    }
+    from.PushMessage("reject", cmd, REJECT_MALFORMED, err);
+}
+
 bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t nTimeReceived)
 {
     RandAddSeedPerfmon();
@@ -5222,7 +5239,8 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
 
         NodeStatePtr nodestate(pfrom->GetId());
 
-        bool tryMempool = nodestate->thinblock->isAvailable() || !nodestate->thinblock->addTx(tx);
+        bool tryMempool = nodestate->thinblock->isAvailable2()
+            || !nodestate->thinblock->addTxFirstBlock(tx);
 
         // tx may belong to recently finished thin block. In that case
         // we don't want to try mempool, node may get banned for sending is coinbase tx.
@@ -5383,15 +5401,10 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
                 inFlight, CheckBlockIndex);
             ProcessMerkleBlock(*pfrom, vRecv, *(nodestate->thinblock), TxFinderImpl(), p);
         }
-        catch (...) {
-            LogPrintf("Unexpected error receiving merkleblock from %d\n", pfrom->id);
-            LOCK(cs_main);
-            NodeStatePtr nodestate(pfrom->id);
-            nodestate->thinblock->setAvailable();
-            Misbehaving(pfrom->GetId(), 10); // FIXME: Is this DoS policy reasonable? May not be pfrom's fault.
+        catch (const std::exception& e) {
+            unexpectedThinError(strCommand, *pfrom, e.what());
             throw;
         }
-
     }
     else if (strCommand == "xthinblock" && !fImporting && !fReindex) // Ignore blocks received while importing
     {
@@ -5405,12 +5418,8 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             XThinBlockProcessor blockp(*pfrom, *(nodestate->thinblock), headerp);
             blockp(vRecv, TxFinderImpl());
         }
-        catch (...) {
-            LogPrintf("Unexpected error receiving xthinblock from %d\n", pfrom->id);
-            LOCK(cs_main);
-            NodeStatePtr nodestate(pfrom->id);
-            nodestate->thinblock->setAvailable();
-            Misbehaving(pfrom->GetId(), 10); // FIXME: Is this DoS policy reasonable? May not be pfrom's fault.
+        catch (const std::exception& e) {
+            unexpectedThinError(strCommand, *pfrom, e.what());
             throw;
         }
     }
@@ -5426,12 +5435,8 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             CompactBlockProcessor blockp(*pfrom, *(nodestate->thinblock), headerp);
             blockp(vRecv, mempool);
         }
-        catch (...) {
-            LogPrintf("Unexpected error receiving cmpctblock from %d\n", pfrom->id);
-            LOCK(cs_main);
-            NodeStatePtr nodestate(pfrom->id);
-            nodestate->thinblock->setAvailable();
-            Misbehaving(pfrom->GetId(), 10); // FIXME: Is this DoS policy reasonable? May not be pfrom's fault.
+        catch (const std::exception& e) {
+            unexpectedThinError(strCommand, *pfrom, e.what());
             throw;
         }
     }
@@ -5899,8 +5904,8 @@ bool WillDownloadFromNode(CNode* pto, const ThinBlockWorker& worker) {
             || NodeStatePtr(pto->id)->supportsCompactBlocks))
         return false;
 
-    // Is node busy serving a thin block already?
-    return worker.isAvailable();
+    // Can node currenty serve thin blocks?
+    return worker.isAvailable2();
 }
 
 
@@ -6126,9 +6131,13 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             std::set<NodeId> stallers;
             FindNextBlocksToDownload(pto->GetId(), MAX_BLOCKS_IN_TRANSIT_PER_PEER - statePtr->nBlocksInFlight, vToDownload, stallers);
             BOOST_FOREACH(CBlockIndex *pindex, vToDownload) {
-                if (ThinBlocksActive(pto) && worker.isAvailable()) {
+
+                // Request at most 1 thin block at a time.
+                // If we need to request more, we're likely not close to the tip
+                // and its better to request full blocks due to mempool differences.
+                if (ThinBlocksActive(pto) && worker.blocksInFlight().empty()) {
                     worker.requestBlock(pindex->GetBlockHash(), vGetData, *pto);
-                    worker.setToWork(pindex->GetBlockHash());
+                    worker.addWork(pindex->GetBlockHash());
                     LogPrint("net", "Requesting thin block %s (%d) peer=%d\n",
                             pindex->GetBlockHash().ToString(), pindex->nHeight, pto->id);
                 }

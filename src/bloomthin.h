@@ -27,8 +27,10 @@ class BloomThinWorker : public ThinBlockWorker {
     public:
         BloomThinWorker(ThinBlockManager& m, NodeId);
 
-        virtual void requestBlock(const uint256& block,
-                std::vector<CInv>& getDataReq, CNode& node);
+        void requestBlock(const uint256& block,
+            std::vector<CInv>& getDataReq, CNode& node) override;
+
+        bool supportsParallel() const override { return false; }
 };
 
 
