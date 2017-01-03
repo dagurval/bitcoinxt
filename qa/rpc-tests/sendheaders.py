@@ -82,6 +82,8 @@ e. Announce one more that doesn't connect.
    Expect: disconnect.
 '''
 
+XT_TWEAK = True
+
 direct_fetch_response_time = 0.05
 
 class BaseNode(SingleNodeConnCB):
@@ -185,12 +187,28 @@ class BaseNode(SingleNodeConnCB):
         assert(wait_until(test_function, timeout=timeout))
         return
 
-    def wait_for_getdata(self, hash_list, timeout=60):
+    def wait_for_getdata(self, hash_list, timeout=60, predicate = None):
         if hash_list == []:
             return
 
         test_function = lambda: self.last_getdata != None and [x.hash for x in self.last_getdata.inv] == hash_list
-        assert(wait_until(test_function, timeout=timeout))
+
+        if predicate == "or":
+            def any_match():
+                if self.last_getdata is None:
+                    return False
+
+                for h in self.last_getdata.inv:
+                    if h.hash in hash_list:
+                        return True
+                return False
+
+            test_function = any_match
+
+        if not wait_until(test_function, timeout=timeout):
+            print(str(self) + " Expected getdata for " + str(hash_list)
+                    + ", got " + str(self.last_getdata))
+            assert(False)
         return
 
     def wait_for_disconnect(self, timeout=60):
@@ -351,10 +369,20 @@ class SendHeadersTest(BitcoinTestFramework):
                     test_node.wait_for_getheaders(timeout=5)
                     # Should have received a getheaders now
                     test_node.send_header_for_blocks(blocks)
+                    if XT_TWEAK:
+                        # inv announcements below (from inv_node)
+                        # may reach the node first
+                        test_node.sync_with_ping()
                     # Test that duplicate inv's won't result in duplicate
                     # getdata requests, or duplicate headers announcements
                     [ inv_node.send_block_inv(x.sha256) for x in blocks ]
-                    test_node.wait_for_getdata([x.sha256 for x in blocks], timeout=5)
+
+                    predicate = None
+                    if XT_TWEAK:
+                        # XT may send getheaders in seperate requests
+                        predicate = "or"
+                    test_node.wait_for_getdata([x.sha256 for x in blocks],
+                            timeout=5, predicate = predicate)
                     inv_node.sync_with_ping()
                 else:
                     # Announce via headers
