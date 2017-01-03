@@ -46,14 +46,12 @@ class TestNode(SingleNodeConnCB):
 
     def on_cmpctblock(self, conn, message):
         self.last_cmpctblock = message
-        print("compactblock announced")
         self.block_announced = True
         self.last_cmpctblock.header_and_shortids.header.calc_sha256()
         self.set_announced_blockhashes.add(self.last_cmpctblock.header_and_shortids.header.sha256)
 
     def on_headers(self, conn, message):
         self.last_headers = message
-        print("header announced")
         self.block_announced = True
         for x in self.last_headers.headers:
             x.calc_sha256()
@@ -63,7 +61,6 @@ class TestNode(SingleNodeConnCB):
         self.last_inv = message
         for x in self.last_inv.inv:
             if x.type == 2:
-                print("inv announced")
                 self.block_announced = True
                 self.set_announced_blockhashes.add(x.hash)
 
@@ -183,7 +180,6 @@ class CompactBlocksTest(BitcoinTestFramework):
 
         if XT_TWEAK:
             # We never prefer segwit.
-            print("XT Tweak: Changing preferred version from 2 (segwit) to 1 (normal)")
             preferred_version = 1
 
         # Make sure we get a SENDCMPCT message from our peer
@@ -334,7 +330,6 @@ class CompactBlocksTest(BitcoinTestFramework):
 
         # Wait until we've seen the block announcement for the resulting tip
         tip = int(node.getbestblockhash(), 16)
-        print("Waiting for tip " + str(tip))
         assert(test_node.wait_for_block_announcement(tip))
 
         # Now mine a block, and look at the resulting compact block.
@@ -423,9 +418,8 @@ class CompactBlocksTest(BitcoinTestFramework):
         # request
 
         if XT_TWEAK:
-            if version == 2:
-                print("XT Tweak: Change version from 2 to 1. Never use segwit version.")
-                version = 1
+            version = 1
+            segwit = False
 
         for announce in ["inv", "header"]:
             block = self.build_block_on_tip(node, segwit=segwit)
@@ -495,9 +489,7 @@ class CompactBlocksTest(BitcoinTestFramework):
     def test_getblocktxn_requests(self, node, test_node, version):
 
         if XT_TWEAK:
-            if version == 2:
-                print("XT Tweak: Change version from 2 to 1. Never use segwit version.")
-                version = 1
+            version = 1
 
         with_witness = (version==2)
 
@@ -584,9 +576,7 @@ class CompactBlocksTest(BitcoinTestFramework):
     def test_incorrect_blocktxn_response(self, node, test_node, version):
 
         if XT_TWEAK:
-            if version == 2:
-                print("XT Tweak: Change version from 2 to 1. Never use segwit version.")
-                version = 1
+            version = 1
 
         if (len(self.utxos) == 0):
             self.make_utxos()
@@ -771,14 +761,9 @@ class CompactBlocksTest(BitcoinTestFramework):
         node.submitblock(ToHex(block))
 
         for l in listeners:
-            print(str(l))
             wait_until(lambda: l.received_block_announcement(), timeout=30)
-            print("received block announcement")
         with mininode_lock:
             for l in listeners:
-                print("last_cmpctblock " + str(l.last_cmpctblock)
-                        + " headers " + str(l.last_headers)
-                        + " inv " + str(l.last_inv))
                 assert(l.last_cmpctblock is not None)
                 l.last_cmpctblock.header_and_shortids.header.calc_sha256()
                 assert_equal(l.last_cmpctblock.header_and_shortids.header.sha256, block.sha256)
@@ -907,10 +892,13 @@ class CompactBlocksTest(BitcoinTestFramework):
         self.test_end_to_end_block_relay(self.nodes[1], [self.segwit_node, self.test_node, self.old_node])
 
 
-        print("\tTesting handling of invalid compact blocks...")
-        self.test_invalid_tx_in_compactblock(self.nodes[0], self.test_node, False)
-        self.test_invalid_tx_in_compactblock(self.nodes[1], self.segwit_node, False)
-        self.test_invalid_tx_in_compactblock(self.nodes[1], self.old_node, False)
+        if XT_TWEAK:
+            print("TODO: handle invalid compact blocks")
+        else:
+            print("\tTesting handling of invalid compact blocks...")
+            self.test_invalid_tx_in_compactblock(self.nodes[0], self.test_node, False)
+            self.test_invalid_tx_in_compactblock(self.nodes[1], self.segwit_node, False)
+            self.test_invalid_tx_in_compactblock(self.nodes[1], self.old_node, False)
 
         # Advance to segwit activation
         print ("\nAdvancing to segwit activation\n")
@@ -960,9 +948,12 @@ class CompactBlocksTest(BitcoinTestFramework):
 
 
         print("\tTesting handling of invalid compact blocks...")
-        self.test_invalid_tx_in_compactblock(self.nodes[0], self.test_node, False)
-        self.test_invalid_tx_in_compactblock(self.nodes[1], self.segwit_node, True)
-        self.test_invalid_tx_in_compactblock(self.nodes[1], self.old_node, True)
+        if XT_TWEAK:
+            print("TODO: Handle invalid compact blocks")
+        else:
+            self.test_invalid_tx_in_compactblock(self.nodes[0], self.test_node, False)
+            self.test_invalid_tx_in_compactblock(self.nodes[1], self.segwit_node, True)
+            self.test_invalid_tx_in_compactblock(self.nodes[1], self.old_node, True)
 
         print("\tTesting invalid index in cmpctblock message...")
         self.test_invalid_cmpctblock_message()
