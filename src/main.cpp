@@ -173,13 +173,6 @@ namespace {
     uint32_t nBlockSequenceId = 1;
 
     /**
-     * Sources of received blocks, saved to be able to send them reject
-     * messages or ban them when processing happens afterwards. Protected by
-     * cs_main.
-     */
-    map<uint256, NodeId> mapBlockSource;
-
-    /**
      * Filter for transactions that were recently rejected by
      * AcceptToMemoryPool. These are not rerequested until the chain tip
      * changes, at which point the entire filter is reset. Protected by
@@ -481,9 +474,14 @@ OnBlockFinished::OnBlockFinished(const std::string& strCommand) : strCommand(str
 
 void OnBlockFinished::operator()(const CBlock& block, const std::vector<NodeId>& ids) {
     AssertLockHeld(cs_main);
-    CBlock copy(block);
+
     CValidationState state;
-    if (!ProcessNewBlock(state, pickBlockSource(ids), &copy,
+    std::set<NodeId> nodes(begin(ids), end(ids));
+    bool canMisbehave = false; //< possibly a block announcement
+    BlockSource source(block.GetHash(), nodes, canMisbehave);
+
+    CBlock copy(block);
+    if (!ProcessNewBlock(state, source, &copy,
             hasWhitelistedNode(ids), NULL)) {
         LogPrintf("ProcessNewBlock failed in %s\n", __func__);
     }
@@ -1789,16 +1787,20 @@ void static InvalidChainFound(CBlockIndex* pindexNew)
     CheckForkWarningConditions();
 }
 
-void static InvalidBlockFound(CBlockIndex *pindex, const CValidationState &state) {
+void static InvalidBlockFound(CBlockIndex *pindex, const CValidationState &state,
+        const BlockSource& blockSource) {
     int nDoS = 0;
     if (state.IsInvalid(nDoS)) {
-        std::map<uint256, NodeId>::iterator it = mapBlockSource.find(pindex->GetBlockHash());
-        NodeStatePtr nodeState(it->second);
-        if (it != mapBlockSource.end() && !nodeState.IsNull()) {
+
+        for (NodeId id : blockSource.nodes) {
+            NodeStatePtr nodeState(id);
+            if (nodeState.IsNull())
+                continue;
+
             CBlockReject reject = {state.GetRejectCode(), state.GetRejectReason().substr(0, MAX_REJECT_MESSAGE_LENGTH), pindex->GetBlockHash()};
             nodeState->rejects.push_back(reject);
-            if (nDoS > 0)
-                Misbehaving(it->second, nDoS);
+            if (blockSource.canMisbehave && nDoS > 0)
+                Misbehaving(id, nDoS);
         }
     }
     if (!state.CorruptionPossible()) {
@@ -2773,7 +2775,8 @@ static int64_t nTimePostConnect = 0;
  * Connect a new block to chainActive. pblock is either NULL or a pointer to a CBlock
  * corresponding to pindexNew, to bypass loading it again from disk.
  */
-bool static ConnectTip(CValidationState &state, CBlockIndex *pindexNew, CBlock *pblock) {
+bool static ConnectTip(CValidationState &state, CBlockIndex *pindexNew,
+        CBlock *pblock, const BlockSource& blockSource) {
     assert(pindexNew->pprev == chainActive.Tip());
     // Read block from disk.
     int64_t nTime1 = GetTimeMicros();
@@ -2794,10 +2797,9 @@ bool static ConnectTip(CValidationState &state, CBlockIndex *pindexNew, CBlock *
         GetMainSignals().BlockChecked(*pblock, state);
         if (!rv) {
             if (state.IsInvalid())
-                InvalidBlockFound(pindexNew, state);
+                InvalidBlockFound(pindexNew, state, blockSource);
             return error("ConnectTip(): ConnectBlock %s failed", pindexNew->GetBlockHash().ToString());
         }
-        mapBlockSource.erase(inv.hash);
         nTime3 = GetTimeMicros(); nTimeConnectTotal += nTime3 - nTime2;
         LogPrint("bench", "  - Connect total: %.2fms [%.2fs]\n", (nTime3 - nTime2) * 0.001, nTimeConnectTotal * 0.000001);
         assert(view.Flush());
@@ -2904,7 +2906,8 @@ static void PruneBlockIndexCandidates() {
  * Try to make some progress towards making pindexMostWork the active block.
  * pblock is either NULL or a pointer to a CBlock corresponding to pindexMostWork.
  */
-static bool ActivateBestChainStep(CValidationState &state, CBlockIndex *pindexMostWork, CBlock *pblock) {
+static bool ActivateBestChainStep(CValidationState &state,
+        CBlockIndex *pindexMostWork, CBlock *pblock, const BlockSource& blockSource) {
     AssertLockHeld(cs_main);
     bool fInvalidFound = false;
     const CBlockIndex *pindexOldTip = chainActive.Tip();
@@ -2937,7 +2940,8 @@ static bool ActivateBestChainStep(CValidationState &state, CBlockIndex *pindexMo
 
         // Connect new blocks.
         BOOST_REVERSE_FOREACH(CBlockIndex *pindexConnect, vpindexToConnect) {
-            if (!ConnectTip(state, pindexConnect, pindexConnect == pindexMostWork ? pblock : NULL)) {
+            CBlock* mostWork = pindexConnect == pindexMostWork ? pblock : nullptr;
+            if (!ConnectTip(state, pindexConnect, mostWork, blockSource)) {
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.
                     if (!state.CorruptionPossible())
@@ -2981,7 +2985,7 @@ static bool ActivateBestChainStep(CValidationState &state, CBlockIndex *pindexMo
  * or an activated best chain. pblock is either NULL or a pointer to a block
  * that is already loaded (to avoid loading it again from disk).
  */
-bool ActivateBestChain(CValidationState &state, CBlock *pblock) {
+bool ActivateBestChain(CValidationState &state, CBlock *pblock, const BlockSource& blockSource) {
     CBlockIndex *pindexMostWork = NULL;
     const CChainParams& chainParams = Params();
     do {
@@ -2998,7 +3002,10 @@ bool ActivateBestChain(CValidationState &state, CBlock *pblock) {
             if (pindexMostWork == NULL || pindexMostWork == chainActive.Tip())
                 return true;
 
-            if (!ActivateBestChainStep(state, pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : NULL))
+            CBlock* mostWork = pblock && (pblock->GetHash() == pindexMostWork->GetBlockHash())
+                ? pblock : nullptr;
+
+            if (!ActivateBestChainStep(state, pindexMostWork, mostWork, blockSource))
                 return false;
 
             pindexNewTip = chainActive.Tip();
@@ -3558,7 +3565,8 @@ static bool IsSuperMajority(int versionOrBitmask, const CBlockIndex* pstart, uns
 }
 
 
-bool ProcessNewBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, bool fForceProcessing, CDiskBlockPos *dbp)
+bool ProcessNewBlock(CValidationState &state, const BlockSource& from,
+        CBlock* pblock, bool fForceProcessing, CDiskBlockPos *dbp)
 {
     LogPrintf("ProcessNewBlock start\n");
     // Preliminary checks
@@ -3575,15 +3583,12 @@ bool ProcessNewBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, bool
         // Store to disk
         CBlockIndex *pindex = NULL;
         bool ret = AcceptBlock(*pblock, state, &pindex, fRequested, dbp);
-        if (pindex && pfrom) {
-            mapBlockSource[pindex->GetBlockHash()] = pfrom->GetId();
-        }
         CheckBlockIndex();
         if (!ret)
             return error("%s: AcceptBlock FAILED", __func__);
     }
 
-    if (!ActivateBestChain(state, pblock))
+    if (!ActivateBestChain(state, pblock, from))
         return error("%s: ActivateBestChain failed", __func__);
 
     LogPrintf("ProcessNewBlock exit\n");
@@ -4008,7 +4013,6 @@ void UnloadBlockIndex()
     vinfoBlockFile.clear();
     nLastBlockFile = 0;
     nBlockSequenceId = 1;
-    mapBlockSource.clear();
     blocksInFlight.clear();
     nQueuedValidatedHeaders = 0;
     nPreferredDownload = 0;
@@ -4141,7 +4145,7 @@ bool LoadExternalBlockFile(FILE* fileIn, CDiskBlockPos *dbp)
                 // process in case the block isn't known yet
                 if (mapBlockIndex.count(hash) == 0 || (mapBlockIndex[hash]->nStatus & BLOCK_HAVE_DATA) == 0) {
                     CValidationState state;
-                    if (ProcessNewBlock(state, NULL, &block, true, dbp))
+                    if (ProcessNewBlock(state, BlockSource(), &block, true, dbp))
                         nLoaded++;
                     if (state.IsError())
                         break;
@@ -4163,7 +4167,7 @@ bool LoadExternalBlockFile(FILE* fileIn, CDiskBlockPos *dbp)
                             LogPrintf("%s: Processing out of order child %s of %s\n", __func__, block.GetHash().ToString(),
                                     head.ToString());
                             CValidationState dummy;
-                            if (ProcessNewBlock(dummy, NULL, &block, true, &it->second))
+                            if (ProcessNewBlock(dummy, BlockSource(), &block, true, &it->second))
                             {
                                 nLoaded++;
                                 queue.push_back(block.GetHash());
