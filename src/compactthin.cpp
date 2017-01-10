@@ -21,20 +21,44 @@ void CompactWorker::requestBlock(const uint256& block,
 
 class CompactAnn : public BlockAnnHandle {
     public:
-        CompactAnn(CNode& n) : n(n) {
+        CompactAnn(CNode& n) : node(&n) {
+
             LogPrint("ann", "requesting compact block announcements "
-                    "peer=%d\n", n.id);
-            n.AddRef();
-            enableCompactBlocks(n, true);
+                    "peer=%d\n", nodeID());
+
+            enableCompactBlocks(*node, true);
+
+            finalizeCallb = [=](NodeId id) {
+                if (id != nodeID())
+                    return;
+                node = nullptr;
+            };
+            finalizeCallbConn = GetNodeSignals().FinalizeNode.connect(finalizeCallb);
         }
         ~CompactAnn() {
+            finalizeCallbConn.disconnect();
+            if (!node)
+                return;
+
             LogPrint("ann", "un-requesting compact block announcements "
-                    "peer=%d\n", n.id);
-            enableCompactBlocks(n, false);
-            n.Release();
+                    "peer=%d\n", nodeID());
+
+            enableCompactBlocks(*node, false);
         }
-        NodeId nodeID() const override { return n.id; }
-        CNode& n;
+
+        void onNodeDestroyed(NodeId id) {
+            if (id != node->id)
+                return;
+            node = nullptr;
+        }
+
+        NodeId nodeID() const override {
+            return node ? node->id : -1;
+        }
+
+        CNode* node;
+        std::function<void(NodeId)> finalizeCallb;
+        boost::signals2::connection finalizeCallbConn;
 };
 
 std::unique_ptr<BlockAnnHandle> CompactWorker::requestBlockAnnouncements(CNode& n) {
