@@ -83,7 +83,7 @@ BOOST_AUTO_TEST_CASE(ignore_if_has_block_data) {
     ProcessMerkleBlock(pfrom, mstream, worker, NullFinder(), headerprocessor);
 
     // peer should not be working on anything
-    BOOST_CHECK(worker.blocksInFlight().empty());
+    BOOST_CHECK(!worker.isWorking());
     BOOST_CHECK_EQUAL(0, pfrom.thinBlockNonce);
 }
 
@@ -99,9 +99,7 @@ BOOST_AUTO_TEST_CASE(bloomthin_ditches_old_block) {
     // over to mblock when that merkleblock arrives.
     ProcessMerkleBlock(pfrom, mstream, worker, NullFinder(), headerprocessor);
 
-    BOOST_CHECK_EQUAL(
-            mblock.header.GetHash().ToString(),
-            worker.blocksInFlight().begin()->ToString());
+    BOOST_CHECK(worker.isWorkingOn(mblock.header.GetHash()));
     BOOST_CHECK(pfrom.thinBlockNonce != 0);
     BOOST_CHECK(worker.isStubBuilt(mblock.header.GetHash()));
 }
@@ -209,7 +207,7 @@ BOOST_AUTO_TEST_CASE(xthinblock_ignore_invalid) {
     process(s, NullFinder());
 
     // Should reset the worker.
-    BOOST_CHECK(worker.blocksInFlight().empty());
+    BOOST_CHECK(!worker.isWorking());
 
     // ...and misbehave the client.
     BOOST_CHECK_EQUAL(20, process.misbehaved);
@@ -229,7 +227,7 @@ BOOST_AUTO_TEST_CASE(xthinblock_ignore_if_has_block_data) {
     process(s, NullFinder());
 
     // peer should not be working on anything
-    BOOST_CHECK(worker.blocksInFlight().empty());
+    BOOST_CHECK(!worker.isWorking());
     BOOST_CHECK(pfrom.messages.empty()); //<- no re-requesting
 }
 
