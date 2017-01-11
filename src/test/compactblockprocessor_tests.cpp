@@ -78,53 +78,48 @@ BOOST_AUTO_TEST_CASE(accepts_parallel_compacts) {
     BOOST_CHECK(w.isWorkingOn(block2.GetHash()));
     BOOST_CHECK_EQUAL(1, thinmg->numWorkers(block1));
     BOOST_CHECK_EQUAL(1, thinmg->numWorkers(block2.GetHash()));
-    w.stopAllWork();
-
-    thinmg.reset();
 }
 
-// received compactblock 000000000000000000b81e03d661d1b784cdb58a43065924eb61cf2387ef0a04 from peer=4
-// received cmpctblock 000000000000000000b81e03d661d1b784cdb58a43065924eb61cf2387ef0a04 announcement peer=4
-// Created compact stub for 000000000000000000b81e03d661d1b784cdb58a43065924eb61cf2387ef0a04, 2535 transactions.
-// 6 out of 2535 txs missing
-// re-requesting 6 compact txs for 000000000000000000b81e03d661d1b784cdb58a43065924eb61cf2387ef0a04 peer=4
-// received compactblock 000000000000000000b81e03d661d1b784cdb58a43065924eb61cf2387ef0a04 from peer=5
-// received cmpctblock 000000000000000000b81e03d661d1b784cdb58a43065924eb61cf2387ef0a04 announcement peer=5
-// Created compact stub for 000000000000000000b81e03d661d1b784cdb58a43065924eb61cf2387ef0a04, 2535 transactions.
+BOOST_AUTO_TEST_CASE(two_process_same) {
+    // Check that two nodes can process the same block at the same time,
+    // even though it's two compact blocks with different idks
 
-BOOST_AUTO_TEST_CASE(rerequest_prev_compact) {
-    // Scenario:
-    // We receive a compact block (#1). We don't have all
-    // the transcations and need to re-request them.
-    //
-    // A second (#2) compact block for the same block comes in. We
-    // also need to re-request txs for it.
-    //
-    // Bug: #2 is misbehaved when generating a re-request due to handling
-    // of different idks in the two compact blocks.
+    try {
+        CBlock block = TestBlock1();
 
-    CBlock block = TestBlock1();
+        DummyNode node1(12, thinmg.get());
+        DummyNode node2(21, thinmg.get());
 
-    DummyNode node1(12, thinmg.get());
-    DummyNode node2(21, thinmg.get());
+        CompactWorker w1(*thinmg, node1.id);
+        CompactWorker w2(*thinmg, node2.id);
 
-    CompactWorker w1(*thinmg, node1.id);
-    CompactWorker w2(*thinmg, node2.id);
+        CompactBlock c1(block, CoinbaseOnlyPrefiller{});
+        CompactBlock c2(block, CoinbaseOnlyPrefiller{}); // Has differet idks
 
-    CompactBlock c1(block, CoinbaseOnlyPrefiller{});
-    CompactBlock c2(block, CoinbaseOnlyPrefiller{}); // Has differet idks
+        CompactBlockProcessor p1(node1, w1, headerp);
+        CompactBlockProcessor p2(node2, w2, headerp);
 
-    CompactBlockProcessor p1(node1, w1, headerp);
-    CompactBlockProcessor p2(node1, w1, headerp);
+        CDataStream s1 = toStream(c1);
+        CDataStream s2 = toStream(c2);
+        p1(s1, mpool);
+        p2(s2, mpool);
 
-    CDataStream s1 = toStream(c1);
-    CDataStream s2 = toStream(c2);
-    p1(s1, mpool);
-    p2(s2, mpool);
-    w1.stopAllWork();
-    w2.stopAllWork();
-    thinmg.reset();
+        // both should be working on the block still
+        BOOST_CHECK(w1.isWorkingOn(block.GetHash()));
+        BOOST_CHECK(w2.isWorkingOn(block.GetHash()));
 
+        // both should have sent a transaction re-request
+        auto has_msg = [](DummyNode& n, const std::string& msg) {
+            return std::find(begin(n.messages), end(n.messages), msg)
+                != end(n.messages);
+        };
+        BOOST_CHECK(has_msg(node1, "getblocktxn"));
+        BOOST_CHECK(has_msg(node2, "getblocktxn"));
+    }
+    catch (std::exception& e) {
+        std::cout << e.what() << std::endl;
+        throw;
+    }
 };
 
 BOOST_AUTO_TEST_SUITE_END();

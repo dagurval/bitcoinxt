@@ -54,7 +54,7 @@ void BloomBlockConcluder::reRequest(
     ThinBlockWorker& worker,
     uint64_t nonce)
 {
-    std::vector<ThinTx> txsMissing = worker.getTxsMissing(block);
+    std::vector<std::pair<int, ThinTx> > txsMissing = worker.getTxsMissing(block);
     assert(txsMissing.size()); // worker should have been available, not "missing 0 transactions".
     LogPrint("thin", "Missing %d transactions for thin block %s, re-requesting.\n",
             txsMissing.size(), block.ToString());
@@ -62,8 +62,8 @@ void BloomBlockConcluder::reRequest(
     std::vector<CInv> hashesToReRequest;
 
     for (auto& m : txsMissing) {
-        hashesToReRequest.push_back(CInv(MSG_TX, m.full()));
-        LogPrint("thin", "Re-requesting tx %s\n", m.full().ToString());
+        hashesToReRequest.push_back(CInv(MSG_TX, m.second.full()));
+        LogPrint("thin", "Re-requesting tx %s\n", m.second.full().ToString());
     }
     assert(hashesToReRequest.size() > 0);
     worker.setReRequesting(block, true);

@@ -147,7 +147,7 @@ bool ThinBlockWorker::addTxFirstBlock(const CTransaction& tx) {
     return addTx(*blocks.begin(), tx);
 }
 
-std::vector<ThinTx> ThinBlockWorker::getTxsMissing(const uint256& block) const {
+std::vector<std::pair<int, ThinTx> > ThinBlockWorker::getTxsMissing(const uint256& block) const {
     return mg.getTxsMissing(block);
 }
 

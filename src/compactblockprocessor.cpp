@@ -60,30 +60,14 @@ void CompactBlockProcessor::operator()(CDataStream& vRecv, const CTxMemPool& mem
     }
 
     // Request missing
-    std::vector<ThinTx> missing = worker.getTxsMissing(hash);
+    std::vector<std::pair<int, ThinTx> > missing = worker.getTxsMissing(hash);
     assert(!missing.empty());
 
     CompactReRequest req;
     req.blockhash = hash;
 
-    std::vector<ThinTx> all = stub->allTransactions();
-
-    for (auto& tx : missing) {
-
-        auto res = std::find_if(begin(all), end(all), [&tx](const ThinTx& b) {
-            return tx.equals(b);
-        });
-        if (res == end(all))
-        {
-            // This can happen if the remote peer
-            // sends us the same compact block twice in a row,
-            // but with different idks (ids obfuscated differently).
-            throw std::runtime_error("Unable to create a re-request for compact block");
-        }
-
-        size_t index = std::distance(begin(all), res);
-        req.indexes.push_back(index);
-    }
+    for (auto& t : missing)
+        req.indexes.push_back(t.first /* index in block */);
 
     LogPrint("thin", "re-requesting %d compact txs for %s peer=%d\n",
             req.indexes.size(), hash.ToString(), from.id);
