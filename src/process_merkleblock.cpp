@@ -64,7 +64,7 @@ void ProcessMerkleBlock(CNode& pfrom, CDataStream& vRecv,
         return;
     }
 
-    if (worker.isWorking() && !worker.isWorkingOn(hash)) {
+    if (!worker.isAvailable2() && !worker.isWorkingOn(hash)) {
         LogPrint("thin", "expected peer to be working on another block, "
                 "but switching to %s peer=%d\n",
                 hash.ToString(), pfrom.id);

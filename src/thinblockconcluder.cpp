@@ -15,8 +15,8 @@
 void BloomBlockConcluder::operator()(CNode* pfrom,
     uint64_t nonce, ThinBlockWorker& worker) {
 
-    if (!worker.isWorking()) {
-        // Block has finished.
+    // Only when the thin block is finished will the worker be available.
+    if (worker.isAvailable2()) {
         pfrom->thinBlockNonce = 0;
         pfrom->thinBlockNonceBlock.SetNull();
         return;
@@ -34,7 +34,7 @@ void BloomBlockConcluder::operator()(CNode* pfrom,
 
     // If node sends us headers, does not send us a merkleblock, but sends us a pong,
     // then the worker will be without a stub.
-    if (worker.isWorking() && !worker.isStubBuilt(block)) {
+    if (!worker.isAvailable2() && !worker.isStubBuilt(block)) {
         LogPrintf("Peer did not provide us a merkleblock for %s peer=%d\n",
             block.ToString(), pfrom->id);
         misbehaving(pfrom->id, 20);

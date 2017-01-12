@@ -25,7 +25,7 @@ class DummyThinWorker : public ThinBlockWorker {
                 std::vector<CInv>& getDataReq, CNode& node) override { }
 
         bool supportsParallel() const override { return false; }
-        bool isWorking() const override { return false; }
+        bool isAvailable2() const override { return false; }
 
 };
 

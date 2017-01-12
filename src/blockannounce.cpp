@@ -53,8 +53,8 @@ bool BlockAnnounceReceiver::almostSynced() {
 
 BlockAnnounceReceiver::DownloadStrategy BlockAnnounceReceiver::pickDownloadStrategy() {
 
-    NodeStatePtr state(from.id);
-    if (state->thinblock->isWorkingOn(block))
+    NodeStatePtr nodestate(from.id);
+    if (nodestate->thinblock->isWorkingOn(block))
     {
         // This block announcement was bundled
         // with a thin block.
@@ -72,7 +72,7 @@ BlockAnnounceReceiver::DownloadStrategy BlockAnnounceReceiver::pickDownloadStrat
         if (blocksInFlight.isInFlight(block))
             return DONT_DOWNL;
 
-        if (state->nBlocksInFlight >= MAX_BLOCKS_IN_TRANSIT_PER_PEER)
+        if (nodestate->nBlocksInFlight >= MAX_BLOCKS_IN_TRANSIT_PER_PEER)
             return DONT_DOWNL;
 
         if (Opt().AvoidFullBlocks()) {
@@ -87,13 +87,15 @@ BlockAnnounceReceiver::DownloadStrategy BlockAnnounceReceiver::pickDownloadStrat
 
     // At this point we know we want a thin block.
 
+    NodeStatePtr state(from.id);
+
     if (thinmg.numWorkers(block) >= Opt().ThinBlocksMaxParallel()) {
         LogPrint("thin", "max parallel thin req reached, not req %s from peer %d\n",
                 block.ToString(), from.id);
         return DONT_DOWNL;
     }
 
-    if (state->thinblock->supportsParallel() || !state->thinblock->isWorking()) {
+    if (!state->thinblock->isAvailable2()) {
         LogPrint("thin", "peer busy, won't req %s peer=%d\n",
                 block.ToString(), from.id);
         return DOWNL_THIN_LATER;
