@@ -5241,7 +5241,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
 
         NodeStatePtr nodestate(pfrom->GetId());
 
-        bool tryMempool = nodestate->thinblock->isAvailable2()
+        bool tryMempool = nodestate->thinblock->isAvailable()
             || !nodestate->thinblock->addTxFirstBlock(tx);
 
         // tx may belong to recently finished thin block. In that case
@@ -5907,9 +5907,8 @@ bool WillDownloadFromNode(CNode* pto, const ThinBlockWorker& worker) {
         return false;
 
     // Can node currenty serve thin blocks?
-    return worker.isAvailable2();
+    return worker.isAvailable();
 }
-
 
 bool SendMessages(CNode* pto, bool fSendTrickle)
 {
@@ -6137,7 +6136,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 // Request at most 1 thin block at a time.
                 // If we need to request more, we're likely not close to the tip
                 // and its better to request full blocks due to mempool differences.
-                if (ThinBlocksActive(pto) && worker.blocksInFlight().empty()) {
+                if (ThinBlocksActive(pto) && !worker.isWorking()) {
                     worker.requestBlock(pindex->GetBlockHash(), vGetData, *pto);
                     worker.addWork(pindex->GetBlockHash());
                     LogPrint("net", "Requesting thin block %s (%d) peer=%d\n",

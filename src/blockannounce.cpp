@@ -95,7 +95,7 @@ BlockAnnounceReceiver::DownloadStrategy BlockAnnounceReceiver::pickDownloadStrat
         return DONT_DOWNL;
     }
 
-    if (!state->thinblock->isAvailable2()) {
+    if (!state->thinblock->isAvailable()) {
         LogPrint("thin", "peer busy, won't req %s peer=%d\n",
                 block.ToString(), from.id);
         return DOWNL_THIN_LATER;

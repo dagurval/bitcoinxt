@@ -120,12 +120,10 @@ class ThinBlockWorker : boost::noncopyable {
         bool isReRequesting(const uint256& block) const;
         void setReRequesting(const uint256& block, bool);
 
-        std::set<uint256> blocksInFlight() const { return blocks; }
-
         NodeId nodeID() const { return node; }
 
-        virtual bool isAvailable2() const {
-            return supportsParallel() || blocks.empty();
+        virtual bool isAvailable() const {
+            return supportsParallel() || !isWorking();
         }
 
         // Enables block announcements with thin blocks.
@@ -134,6 +132,10 @@ class ThinBlockWorker : boost::noncopyable {
         virtual std::unique_ptr<BlockAnnHandle> requestBlockAnnouncements(CNode&)
         {
             return nullptr;
+        }
+
+        bool isWorking() const {
+            return !blocks.empty();
         }
 
         virtual bool isWorkingOn(const uint256& h) const {

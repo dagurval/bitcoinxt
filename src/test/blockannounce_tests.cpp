@@ -177,7 +177,7 @@ BOOST_AUTO_TEST_CASE(dowl_strategy_thin_later_2) {
 
     // By default DummyNode uses DummyThinWorker.
     // DummyThinWorker always returns false for isAvailable().
-    BOOST_ASSERT(!nodestate->thinblock->isAvailable2());
+    BOOST_ASSERT(!nodestate->thinblock->isAvailable());
 
 
     BOOST_CHECK_EQUAL(
