@@ -272,8 +272,7 @@ void BlockAnnounceSender::announceWithBlock(BlockSender& sender) {
     CBlockIndex* block = mapBlockIndex.find(hash)->second;
 
     if (peerHasHeader(block)) {
-        // peer may have announced this block
-        // to us.
+        // peer knows about block
         return;
     }
 

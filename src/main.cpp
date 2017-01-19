@@ -3568,7 +3568,6 @@ static bool IsSuperMajority(int versionOrBitmask, const CBlockIndex* pstart, uns
 bool ProcessNewBlock(CValidationState &state, const BlockSource& from,
         CBlock* pblock, bool fForceProcessing, CDiskBlockPos *dbp)
 {
-    LogPrintf("ProcessNewBlock start\n");
     // Preliminary checks
     bool checked = CheckBlock(*pblock, state);
 
@@ -3591,7 +3590,6 @@ bool ProcessNewBlock(CValidationState &state, const BlockSource& from,
     if (!ActivateBestChain(state, pblock, from))
         return error("%s: ActivateBestChain failed", __func__);
 
-    LogPrintf("ProcessNewBlock exit\n");
     return true;
 }
 
