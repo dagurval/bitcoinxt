@@ -736,9 +736,22 @@ class CompactBlocksTest(BitcoinTestFramework):
         # Generate an old compactblock, and verify that it's not accepted.
         cur_height = node.getblockcount()
         hashPrevBlock = int(node.getblockhash(cur_height-5), 16)
-        block = self.build_block_on_tip(node)
-        block.hashPrevBlock = hashPrevBlock
-        block.solve()
+        if XT_TWEAK:
+            # FIXME: XT runs AcceptBlock on this block, even though its old
+            # and not requested.
+            # Sinc we accept it, it has to be valid.
+            prev_height = cur_height - 5
+            mtp = node.getblockheader(node.getblockhash(prev_height))['mediantime']
+            block = create_block(hashPrevBlock, create_coinbase(absoluteHeight = prev_height + 1), mtp + 1)
+            block.nVersion = 4
+            block.hashPrevBlock = hashPrevBlock
+            block.solve()
+
+        else:
+            # This block is invalid, the height encoded in coinbase is wrong.
+            block = self.build_block_on_tip(node)
+            block.hashPrevBlock = hashPrevBlock
+            block.solve()
 
         comp_block = HeaderAndShortIDs()
         comp_block.initialize_from_block(block)
@@ -748,7 +761,10 @@ class CompactBlocksTest(BitcoinTestFramework):
         found = False
         for x in tips:
             if x["hash"] == block.hash:
-                assert_equal(x["status"], "headers-only")
+                if XT_TWEAK:
+                    assert_equal(x["status"], "valid-headers")
+                else:
+                    assert_equal(x["status"], "headers-only")
                 found = True
                 break
         assert(found)
