@@ -231,18 +231,6 @@ BOOST_AUTO_TEST_CASE(xthinblock_ignore_if_has_block_data) {
     BOOST_CHECK(pfrom.messages.empty()); //<- no re-requesting
 }
 
-//BOOST_AUTO_TEST_CASE(xthinblock_ignore_if_not_requested) {
-//    DummyWorker<XThinWorker> worker(tmgr, 42);
-//    XThinBlock xblock(TestBlock1(), CBloomFilter());
-//
-//    // set to work is not called, so it's not expecting xthinblock
-//    CDataStream s = stream(xblock);
-//    DummyXThinProcessor process(pfrom, worker, headerprocessor);
-//    process(s, NullFinder());
-//    BOOST_CHECK(!worker.isWorkingOn(xblock.header.GetHash()));
-//    BOOST_CHECK(!worker.buildStubCalled);
-//}
-
 BOOST_AUTO_TEST_CASE(xthinblock_header_is_processed) {
     XThinWorker worker(tmgr, 42);
     XThinBlock xblock(TestBlock1(), CBloomFilter());
