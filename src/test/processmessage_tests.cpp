@@ -180,12 +180,13 @@ struct XThinBlockSetup {
     DummyNode pfrom;
     ThinBlockManager tmgr;
     DummyHeaderProcessor headerprocessor;
+    DummyMarkAsInFlight markInFlight;
 };
 
 struct DummyXThinProcessor : public XThinBlockProcessor {
 
-    DummyXThinProcessor(CNode& f, ThinBlockWorker& w,
-        BlockHeaderProcessor& h) : XThinBlockProcessor(f, w, h), misbehaved(0)
+    DummyXThinProcessor(CNode& f, ThinBlockWorker& w, BlockHeaderProcessor& h,
+            BlockInFlightMarker& m) : XThinBlockProcessor(f, w, h, m), misbehaved(0)
     { }
 
     void misbehave(int howmuch) override {
@@ -203,7 +204,7 @@ BOOST_AUTO_TEST_CASE(xthinblock_ignore_invalid) {
     DummyWorker<XThinWorker> worker(tmgr, 42);
     worker.addWork(xblock.header.GetHash());
     CDataStream s = stream(xblock);
-    DummyXThinProcessor process(pfrom, worker, headerprocessor);
+    DummyXThinProcessor process(pfrom, worker, headerprocessor, markInFlight);
     process(s, NullFinder());
 
     // Should reset the worker.
@@ -223,7 +224,7 @@ BOOST_AUTO_TEST_CASE(xthinblock_ignore_if_has_block_data) {
     DummyWorker<XThinWorker> worker(tmgr, 42);
     worker.addWork(xblock.header.GetHash());
     CDataStream s = stream(xblock);
-    DummyXThinProcessor process(pfrom, worker, headerprocessor);
+    DummyXThinProcessor process(pfrom, worker, headerprocessor, markInFlight);
     process(s, NullFinder());
 
     // peer should not be working on anything
@@ -236,7 +237,7 @@ BOOST_AUTO_TEST_CASE(xthinblock_header_is_processed) {
     XThinBlock xblock(TestBlock1(), CBloomFilter());
     worker.addWork(xblock.header.GetHash());
     CDataStream s = stream(xblock);
-    DummyXThinProcessor process(pfrom, worker, headerprocessor);
+    DummyXThinProcessor process(pfrom, worker, headerprocessor, markInFlight);
     process(s, NullFinder());
 
     BOOST_CHECK(headerprocessor.called);
@@ -250,7 +251,7 @@ BOOST_AUTO_TEST_CASE(xthinblock_stop_if_header_fails) {
     worker.addWork(xblock.header.GetHash());
     headerprocessor.headerOK = false;
     CDataStream s = stream(xblock);
-    DummyXThinProcessor process(pfrom, worker, headerprocessor);
+    DummyXThinProcessor process(pfrom, worker, headerprocessor, markInFlight);
     process(s, NullFinder());
 
     BOOST_CHECK(!worker.isWorkingOn(xblock.header.GetHash()));
@@ -266,7 +267,7 @@ BOOST_AUTO_TEST_CASE(xthinblock_rerequest_missing) {
 
     worker.addWork(xblock.header.GetHash());
     CDataStream s = stream(xblock);
-    DummyXThinProcessor process(pfrom, worker, headerprocessor);
+    DummyXThinProcessor process(pfrom, worker, headerprocessor, markInFlight);
     process(s, NullFinder());
 
     BOOST_CHECK(headerprocessor.called);

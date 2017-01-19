@@ -61,6 +61,7 @@ bool BlockProcessor::setToWork(const uint256& hash) {
         LogPrint("thin", "received %s %s announcement peer=%d\n",
                 netcmd, hash.ToString(), from.id);
         worker.addWork(hash);
+        markInFlight(from.id, hash, Params().GetConsensus(), nullptr);
     }
     return true;
 }

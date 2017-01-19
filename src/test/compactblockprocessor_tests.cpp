@@ -47,6 +47,7 @@ struct CBProcessorFixture {
     std::unique_ptr<ThinBlockManager> thinmg;
     CmpctDummyHeaderProcessor headerp;
     CTxMemPool mpool;
+    DummyMarkAsInFlight markInFlight;
 };
 
 BOOST_FIXTURE_TEST_SUITE(compactblockprocessor_tests, CBProcessorFixture);
@@ -65,7 +66,7 @@ BOOST_AUTO_TEST_CASE(accepts_parallel_compacts) {
     uint256 block1 = uint256S("0xf00");
     w.addWork(block1);
 
-    CompactBlockProcessor p(node, w, headerp);
+    CompactBlockProcessor p(node, w, headerp, markInFlight);
 
     CBlock block2 = TestBlock1();
     CDataStream blockstream = toStream(
@@ -96,8 +97,8 @@ BOOST_AUTO_TEST_CASE(two_process_same) {
     CompactBlock c1(block, CoinbaseOnlyPrefiller{});
     CompactBlock c2(block, CoinbaseOnlyPrefiller{}); // Has differet idks
 
-    CompactBlockProcessor p1(node1, w1, headerp);
-    CompactBlockProcessor p2(node2, w2, headerp);
+    CompactBlockProcessor p1(node1, w1, headerp, markInFlight);
+    CompactBlockProcessor p2(node2, w2, headerp, markInFlight);
 
     CDataStream s1 = toStream(c1);
     CDataStream s2 = toStream(c2);
@@ -130,7 +131,7 @@ BOOST_AUTO_TEST_CASE(discard_if_missing_prev) {
 
     headerp.reqConnHeadResp = true; // we need to request prev header (we don't have it)
 
-    CompactBlockProcessor p(node, w, headerp);
+    CompactBlockProcessor p(node, w, headerp, markInFlight);
     p(s, mpool);
 
     // should have discarded block.

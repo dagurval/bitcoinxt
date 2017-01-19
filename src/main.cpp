@@ -5415,7 +5415,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             MarkBlockAsInFlight inFlight;
             DefaultHeaderProcessor headerp(pfrom, blocksInFlight, thinblockmg,
                 inFlight, CheckBlockIndex);
-            XThinBlockProcessor blockp(*pfrom, *(nodestate->thinblock), headerp);
+            XThinBlockProcessor blockp(*pfrom, *(nodestate->thinblock), headerp, inFlight);
             blockp(vRecv, TxFinderImpl());
         }
         catch (const std::exception& e) {
@@ -5432,7 +5432,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             MarkBlockAsInFlight inFlight;
             DefaultHeaderProcessor headerp(pfrom, blocksInFlight, thinblockmg,
                     inFlight, CheckBlockIndex);
-            CompactBlockProcessor blockp(*pfrom, *(nodestate->thinblock), headerp);
+            CompactBlockProcessor blockp(*pfrom, *(nodestate->thinblock), headerp, inFlight);
             blockp(vRecv, mempool);
         }
         catch (const std::exception& e) {

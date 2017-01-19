@@ -5,12 +5,14 @@
 
 class CDataStream;
 class CTxMemPool;
+class BlockInFlightMarker;
 
 class CompactBlockProcessor : public BlockProcessor {
     public:
 
-        CompactBlockProcessor(CNode& f, ThinBlockWorker& w, BlockHeaderProcessor& h) :
-            BlockProcessor(f, w, "cmpctblock", h)
+        CompactBlockProcessor(CNode& f, ThinBlockWorker& w,
+                BlockHeaderProcessor& h, BlockInFlightMarker& m) :
+            BlockProcessor(f, w, "cmpctblock", h, m)
         {
         }
 
