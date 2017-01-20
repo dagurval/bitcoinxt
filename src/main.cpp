@@ -220,13 +220,16 @@ void InitRespendFilter() {
 
 class OnBlockFinished : public ThinBlockFinishedCallb {
     public:
-        OnBlockFinished();
-        OnBlockFinished(const std::string& strCommand);
+        OnBlockFinished(bool canMisbehave)
+            : canMisbehave(canMisbehave) { }
+
+        OnBlockFinished(bool canMisbehave, const std::string& strCommand)
+            : canMisbehave(canMisbehave), strCommand(strCommand) { }
 
         virtual void operator()(const CBlock& block, const std::vector<NodeId>& ids);
 
     private:
-
+        bool canMisbehave;
         const std::string strCommand;
 
         bool hasWhitelistedNode(const std::vector<NodeId>& ids) const;
@@ -240,7 +243,7 @@ struct InFlightEraserImpl : public InFlightEraser {
     virtual void operator()(NodeId, const uint256& block);
 };
 ThinBlockManager thinblockmg(
-        std::unique_ptr<ThinBlockFinishedCallb>(new OnBlockFinished()),
+        std::unique_ptr<ThinBlockFinishedCallb>(new OnBlockFinished(false)),
         std::unique_ptr<InFlightEraser>(new InFlightEraserImpl()));
 
 //////////////////////////////////////////////////////////////////////////////
@@ -469,15 +472,11 @@ void UpdateBlockAvailability(NodeId nodeid, const uint256 &hash) {
     }
 }
 
-OnBlockFinished::OnBlockFinished() { }
-OnBlockFinished::OnBlockFinished(const std::string& strCommand) : strCommand(strCommand) { }
-
 void OnBlockFinished::operator()(const CBlock& block, const std::vector<NodeId>& ids) {
     AssertLockHeld(cs_main);
 
     CValidationState state;
     std::set<NodeId> nodes(begin(ids), end(ids));
-    bool canMisbehave = false; //< possibly a block announcement
     BlockSource source(block.GetHash(), nodes, canMisbehave);
 
     CBlock copy(block);
@@ -5463,7 +5462,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             return true;
         }
 
-        OnBlockFinished callb(strCommand);
+        OnBlockFinished callb(true, strCommand);
         callb(block, std::vector<NodeId>(1, pfrom->id));
     }
     else if (strCommand == "get_xthin") {
