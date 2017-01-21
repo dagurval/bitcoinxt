@@ -5388,7 +5388,12 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         if (p.requestConnectHeaders(headers.at(0), *pfrom))
             return true;
 
-        return p(headers, nCount == MAX_HEADERS_RESULTS);
+        try {
+            p(headers, nCount == MAX_HEADERS_RESULTS);
+        }
+        catch (const BlockHeaderError& e) {
+            return error(e.what());
+        }
     }
     else if (strCommand == "merkleblock" && !fImporting && !fReindex) // Ignore blocks received while importing
     {

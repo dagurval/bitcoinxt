@@ -15,8 +15,8 @@ struct CmpctDummyHeaderProcessor : public BlockHeaderProcessor {
 
     CmpctDummyHeaderProcessor() : reqConnHeadResp(false) { }
 
-    bool operator()(const std::vector<CBlockHeader>&, bool) override {
-        return true;
+    CBlockIndex* operator()(const std::vector<CBlockHeader>&, bool) override {
+        return nullptr;
     }
     bool requestConnectHeaders(const CBlockHeader& h, CNode& from) override {
         return reqConnHeadResp;

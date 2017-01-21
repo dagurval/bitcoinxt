@@ -58,8 +58,12 @@ void ProcessMerkleBlock(CNode& pfrom, CDataStream& vRecv,
         return;
 
     std::vector<CBlockHeader> headers(1, merkleBlock.header);
-    if (!processHeader(headers, false)) {
-        LogPrint("thin", "Header failed for merkleblock peer=%d\n", pfrom.id);
+    try {
+        processHeader(headers, false);
+    }
+    catch (const BlockHeaderError& e) {
+        LogPrintf("Header failed for merkleblock: %s peer=%d\n",
+                e.what(), pfrom.id);
         worker.stopWork(hash);
         return;
     }
