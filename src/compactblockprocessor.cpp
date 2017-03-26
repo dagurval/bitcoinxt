@@ -9,13 +9,7 @@
 #include "consensus/validation.h"
 #include "compacttxfinder.h"
 
-void reqFullBlock(CNode& from, const uint256& block) {
-    CInv req(MSG_BLOCK, block);
-    from.PushMessage("getdata", std::vector<CInv>(1, req));
-}
-
-void CompactBlockProcessor::operator()(CDataStream& vRecv, const CTxMemPool& mempool,
-        size_t currMaxBlockSize)
+void CompactBlockProcessor::operator()(CDataStream& vRecv, const CTxMemPool& mempool)
 {
     CompactBlock block;
     vRecv >> block;
@@ -26,14 +20,7 @@ void CompactBlockProcessor::operator()(CDataStream& vRecv, const CTxMemPool& mem
             hash.ToString(), worker.nodeID());
 
     try {
-        validateCompactBlock(block, currMaxBlockSize);
-    }
-    catch (const LikelyInvalidBlock& e) {
-        LogPrintf("Likely invalid compact block, falling back to full "
-                "block download: %s peer=%d", e.what(), worker.nodeID());
-        worker.setAvailable();
-        reqFullBlock(from, hash);
-        return;
+        validateCompactBlock(block);
     }
     catch (const std::exception& e) {
         LogPrint("thin", "Invalid compact block %s\n", e.what());
