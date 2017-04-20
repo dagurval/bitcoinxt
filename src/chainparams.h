@@ -120,4 +120,12 @@ CChainParams& Params(const std::string& chain);
  */
 void SelectParams(const std::string& chain);
 
+// bip135 begin
+/**
+ * Returns true if a deployment is considered active on a particular network
+ */
+
+bool IsConfiguredDeployment(const Consensus::Params &consensusParams, const int bit);
+// bip135 end
+
 #endif // BITCOIN_CHAINPARAMS_H
