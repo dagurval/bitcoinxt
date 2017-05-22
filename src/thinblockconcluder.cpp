@@ -15,47 +15,49 @@
 void BloomBlockConcluder::operator()(CNode* pfrom,
     uint64_t nonce, ThinBlockWorker& worker) {
 
-    // If it the thin block is finished, it the worker will be available.
+    // Only when the thin block is finished will the worker be available.
     if (worker.isAvailable()) {
         pfrom->thinBlockNonce = 0;
         pfrom->thinBlockNonceBlock.SetNull();
         return;
     }
 
-    if (pfrom->thinBlockNonceBlock != worker.blockHash()) {
-        LogPrint("thin", "thinblockconcluder: pong response for a different download (%s, currently waiting for %s). Ignoring.\n",
-            pfrom->thinBlockNonceBlock.ToString(), worker.blockStr());
+    if (!worker.isWorkingOn(pfrom->thinBlockNonceBlock)) {
+        LogPrint("thin", "thinblockconcluder: pong response for a "
+                "different download, ignoring peer=%d\n", pfrom->id);
         return;
     }
 
+    uint256 block = pfrom->thinBlockNonceBlock;
     pfrom->thinBlockNonce = 0;
     pfrom->thinBlockNonceBlock.SetNull();
 
     // If node sends us headers, does not send us a merkleblock, but sends us a pong,
     // then the worker will be without a stub.
-    if (!worker.isAvailable() && !worker.isStubBuilt()) {
-        LogPrintf("Peer %d did not provide us a merkleblock for %s\n",
-                pfrom->id, worker.blockStr());
+    if (!worker.isAvailable() && !worker.isStubBuilt(block)) {
+        LogPrintf("Peer did not provide us a merkleblock for %s peer=%d\n",
+            block.ToString(), pfrom->id);
         misbehaving(pfrom->id, 20);
-        worker.setAvailable();
+        worker.stopWork(block);
         return;
     }
 
-    if (worker.isReRequesting())
-        return giveUp(pfrom, worker);
+    if (worker.isReRequesting(block))
+        return giveUp(block, pfrom, worker);
 
-    reRequest(pfrom, worker, nonce);
+    reRequest(block, pfrom, worker, nonce);
 }
 
 void BloomBlockConcluder::reRequest(
+    const uint256& block,
     CNode* pfrom,
     ThinBlockWorker& worker,
     uint64_t nonce)
 {
-    std::vector<ThinTx> txsMissing = worker.getTxsMissing();
+    std::vector<ThinTx> txsMissing = worker.getTxsMissing(block);
     assert(txsMissing.size()); // worker should have been available, not "missing 0 transactions".
-    LogPrint("thin", "Missing %d transactions for thin block %s, re-requesting (consider adjusting relay policies)\n",
-            txsMissing.size(), worker.blockStr());
+    LogPrint("thin", "Missing %d transactions for thin block %s, re-requesting.\n",
+            txsMissing.size(), block.ToString());
 
     std::vector<CInv> hashesToReRequest;
     typedef std::vector<ThinTx>::const_iterator auto_;
@@ -65,9 +67,9 @@ void BloomBlockConcluder::reRequest(
         LogPrint("thin", "Re-requesting tx %s\n", m->full().ToString());
     }
     assert(hashesToReRequest.size() > 0);
-    worker.setReRequesting(true);
+    worker.setReRequesting(block, true);
     pfrom->thinBlockNonce = nonce;
-    pfrom->thinBlockNonceBlock = worker.blockHash();
+    pfrom->thinBlockNonceBlock = block;
     pfrom->PushMessage("getdata", hashesToReRequest);
     pfrom->PushMessage("ping", nonce);
 }
@@ -81,12 +83,11 @@ void BloomBlockConcluder::fallbackDownload(CNode *pfrom, const uint256& block) {
     markInFlight(pfrom->id, block, Params().GetConsensus(), NULL);
 }
 
-void BloomBlockConcluder::giveUp(CNode* pfrom, ThinBlockWorker& worker) {
-    LogPrintf("Re-requested transactions for thin block %s from %d, peer did not follow up.\n",
-            worker.blockStr(), pfrom->id);
-    uint256 block = worker.blockHash();
-    bool wasLastWorker = worker.isOnlyWorker();
-    worker.setAvailable();
+void BloomBlockConcluder::giveUp(const uint256& block, CNode* pfrom, ThinBlockWorker& worker) {
+    LogPrintf("Re-requested transactions for thin block %s, peer did not follow up peer=%d.\n",
+            block.ToString(), pfrom->id);
+    bool wasLastWorker = worker.isOnlyWorker(block);
+    worker.stopWork(block);
 
     // Was this the last peer working on thin block? Fallback to full block download.
     if (wasLastWorker)
@@ -101,24 +102,18 @@ void BloomBlockConcluder::misbehaving(NodeId id, int howmuch) {
 void XThinBlockConcluder::operator()(const XThinReReqResponse& resp,
         CNode& pfrom, ThinBlockWorker& worker) {
 
-    if (worker.isAvailable())
+    if (!worker.isWorkingOn(resp.block))
     {
-        LogPrint("thin", "worker peer=%d should not be working on a xthin block,"
-                "ignoring re-req response\n", pfrom.id);
-        return;
-    }
-    if (worker.blockHash() != resp.block) {
-        LogPrint("thin", "working on block %s, got xthin re-req response from peer=%d for %s\n",
-                worker.blockStr(), pfrom.id, resp.block.ToString());
+        LogPrint("thin", "got xthin re-req response for %s, but not "
+                "working on block peer=%d\n", resp.block.ToString(), pfrom.id);
         return;
     }
 
-    typedef std::vector<CTransaction>::const_iterator auto_;
-    for (auto_ t = resp.txRequested.begin(); t != resp.txRequested.end(); ++t)
-        worker.addTx(*t);
+    for (auto& t : resp.txRequested)
+        worker.addTx(resp.block, t);
 
     // Block finished?
-    if (worker.isAvailable())
+    if (!worker.isWorkingOn(resp.block))
         return;
 
     // There is no reason for remote peer not to have provided all
@@ -127,30 +122,25 @@ void XThinBlockConcluder::operator()(const XThinReReqResponse& resp,
         "but still did not provide all transctions missing\n",
         pfrom.id, resp.block.ToString());
 
-    worker.setAvailable();
+    worker.stopWork(resp.block);
     Misbehaving(pfrom.id, 10);
 }
 
 void CompactBlockConcluder::operator()(const CompactReReqResponse& resp,
         CNode& pfrom, ThinBlockWorker& worker) {
 
-    if (worker.isAvailable())
+    if (!worker.isWorkingOn(resp.blockhash))
     {
-        LogPrint("thin", "worker peer=%d should not be working on a compact thin block,"
-                "ignoring re-req response\n", pfrom.id);
-        return;
-    }
-    if (worker.blockHash() != resp.blockhash) {
-        LogPrint("thin", "working on block %s, got compact re-req response from peer=%d for %s\n",
-                worker.blockStr(), pfrom.id, resp.blockhash.ToString());
+        LogPrint("thin", "got compact re-req response for %s, but not "
+                "working on block peer=%d\n", resp.blockhash.ToString(), pfrom.id);
         return;
     }
 
     for (auto& t : resp.txn)
-        worker.addTx(t);
+        worker.addTx(resp.blockhash, t);
 
     // Block finished?
-    if (worker.isAvailable())
+    if (!worker.isWorkingOn(resp.blockhash))
         return;
 
     // There is no reason for remote peer not to have provided all
@@ -159,6 +149,6 @@ void CompactBlockConcluder::operator()(const CompactReReqResponse& resp,
         "but still did not provide all transctions missing\n",
         pfrom.id, resp.blockhash.ToString());
 
-    worker.setAvailable();
+    worker.stopWork(resp.blockhash);
     Misbehaving(pfrom.id, 10);
 }

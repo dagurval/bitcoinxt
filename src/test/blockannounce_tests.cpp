@@ -201,7 +201,7 @@ BOOST_AUTO_TEST_CASE(dowl_strategy_dont_downl_1) {
     DummyNode node2(11, thinmg.get());
     NodeStatePtr state2(node2.id);
     state2->thinblock.reset(new XThinWorker(*thinmg, node2.id));
-    state2->thinblock->setToWork(block);
+    state2->thinblock->addWork(block);
     BOOST_CHECK_EQUAL(1, thinmg->numWorkers(block));
 
     // Second one should not attempt to download on announcement.

@@ -24,10 +24,10 @@ struct DummyWorker : public WORKER_TYPE {
         WORKER_TYPE(m, i), isBuilt(false), buildStubCalled(false)
     { }
 
-    virtual void buildStub(const StubData&, const TxFinder&) {
+    void buildStub(CNode&, const StubData&, const TxFinder&) override {
         buildStubCalled = true;
     }
-    virtual bool isStubBuilt() const {
+    bool isStubBuilt(const uint256& block) const override {
         return isBuilt;
     }
     bool isBuilt;
@@ -81,27 +81,29 @@ BOOST_AUTO_TEST_CASE(ignore_if_has_block_data) {
     DummyBlockIndexEntry dummyEntry(mblock.header.GetHash());
 
     BloomThinWorker worker(tmgr, 42);
-    worker.setToWork(mblock.header.GetHash());
+    worker.addWork(mblock.header.GetHash());
     ProcessMerkleBlock(pfrom, mstream, worker, NullFinder(), headerprocessor);
 
     // peer should not be working on anything
-    BOOST_CHECK(worker.isAvailable());
+    BOOST_CHECK(!worker.isWorking());
     BOOST_CHECK_EQUAL(0, pfrom.thinBlockNonce);
 }
 
-BOOST_AUTO_TEST_CASE(ditches_old_block) {
-    // if we thought the peer was working on a block, but then
-    // provided a new one, we should switch it over to the new one.
-    uint256 dummyhash;
-    dummyhash.SetHex("0xBADF00D");
+BOOST_AUTO_TEST_CASE(bloomthin_ditches_old_block) {
+    // Bloom thin does not support parallel fetching.
+    //
+    // If we thought the peer was working on a block, but then is
+    // provided a different one, we should switch it over to the later.
     BloomThinWorker worker(tmgr, 42);
-    worker.setToWork(dummyhash);
+    worker.addWork(uint256S("0xBADF00D"));
+
+    // Worker is assigned block 0xBADF00D, but will switch
+    // over to mblock when that merkleblock arrives.
     ProcessMerkleBlock(pfrom, mstream, worker, NullFinder(), headerprocessor);
 
-    BOOST_CHECK_EQUAL(mblock.header.GetHash().ToString(),
-            worker.blockStr());
+    BOOST_CHECK(worker.isWorkingOn(mblock.header.GetHash()));
     BOOST_CHECK(pfrom.thinBlockNonce != 0);
-    BOOST_CHECK(worker.isStubBuilt());
+    BOOST_CHECK(worker.isStubBuilt(mblock.header.GetHash()));
 }
 
 // We want to call build stub even if we have one.
@@ -109,7 +111,7 @@ BOOST_AUTO_TEST_CASE(ditches_old_block) {
 // should replace xthin uint64_t hash list (NYI).
 BOOST_AUTO_TEST_CASE(rebuild_stub) {
     DummyWorker<BloomThinWorker> worker(tmgr, 42);
-    worker.setToWork(mblock.header.GetHash());
+    worker.addWork(mblock.header.GetHash());
     worker.isBuilt = true;
     ProcessMerkleBlock(pfrom, mstream, worker, NullFinder(), headerprocessor);
 
@@ -119,7 +121,7 @@ BOOST_AUTO_TEST_CASE(rebuild_stub) {
 
 BOOST_AUTO_TEST_CASE(build_stub) {
     DummyWorker<BloomThinWorker> worker(tmgr, 42);
-    worker.setToWork(mblock.header.GetHash());
+    worker.addWork(mblock.header.GetHash());
     worker.isBuilt = false;
     ProcessMerkleBlock(pfrom, mstream, worker, NullFinder(), headerprocessor);
 
@@ -131,7 +133,7 @@ BOOST_AUTO_TEST_CASE(merkleblock_ignore_if_supports_xthin) {
     pfrom.nServices = NODE_THIN;
 
     DummyWorker<BloomThinWorker> worker(tmgr, 42);
-    worker.setToWork(mblock.header.GetHash());
+    worker.addWork(mblock.header.GetHash());
     worker.isBuilt = false;
     ProcessMerkleBlock(pfrom, mstream, worker, NullFinder(), headerprocessor);
 
@@ -141,19 +143,19 @@ BOOST_AUTO_TEST_CASE(merkleblock_ignore_if_supports_xthin) {
 
 BOOST_AUTO_TEST_CASE(merkleblock_header_is_processed) {
     DummyWorker<BloomThinWorker> worker(tmgr, 42);
-    worker.setToWork(mblock.header.GetHash());
+    worker.addWork(mblock.header.GetHash());
     ProcessMerkleBlock(pfrom, mstream, worker, NullFinder(), headerprocessor);
     BOOST_CHECK(headerprocessor.called);
     BOOST_CHECK(worker.buildStubCalled);
-    BOOST_CHECK(!worker.isAvailable());
+    BOOST_CHECK(worker.isWorkingOn(mblock.header.GetHash()));
 }
 
 BOOST_AUTO_TEST_CASE(merkleblock_stop_if_header_fails) {
     DummyWorker<BloomThinWorker> worker(tmgr, 42);
-    worker.setToWork(mblock.header.GetHash());
+    worker.addWork(mblock.header.GetHash());
     headerprocessor.headerOK = false;
     ProcessMerkleBlock(pfrom, mstream, worker, NullFinder(), headerprocessor);
-    BOOST_CHECK(worker.isAvailable());
+    BOOST_CHECK(!worker.isWorkingOn(mblock.header.GetHash()));
     BOOST_CHECK(!worker.buildStubCalled);
 }
 
@@ -201,13 +203,13 @@ BOOST_AUTO_TEST_CASE(xthinblock_ignore_invalid) {
     xblock.txHashes.clear(); // <- makes block invalid
 
     DummyWorker<XThinWorker> worker(tmgr, 42);
-    worker.setToWork(xblock.header.GetHash());
+    worker.addWork(xblock.header.GetHash());
     CDataStream s = stream(xblock);
     DummyXThinProcessor process(pfrom, worker, headerprocessor);
     process(s, NullFinder());
 
     // Should reset the worker.
-    BOOST_CHECK(worker.isAvailable());
+    BOOST_CHECK(!worker.isWorking());
 
     // ...and misbehave the client.
     BOOST_CHECK_EQUAL(20, process.misbehaved);
@@ -221,52 +223,40 @@ BOOST_AUTO_TEST_CASE(xthinblock_ignore_if_has_block_data) {
     DummyBlockIndexEntry dummyEntry(xblock.header.GetHash());
 
     DummyWorker<XThinWorker> worker(tmgr, 42);
-    worker.setToWork(xblock.header.GetHash());
+    worker.addWork(xblock.header.GetHash());
     CDataStream s = stream(xblock);
     DummyXThinProcessor process(pfrom, worker, headerprocessor);
     process(s, NullFinder());
 
     // peer should not be working on anything
-    BOOST_CHECK(worker.isAvailable());
+    BOOST_CHECK(!worker.isWorking());
     BOOST_CHECK(pfrom.messages.empty()); //<- no re-requesting
-}
-
-BOOST_AUTO_TEST_CASE(xthinblock_ignore_if_not_requested) {
-    DummyWorker<XThinWorker> worker(tmgr, 42);
-    XThinBlock xblock(TestBlock1(), CBloomFilter());
-
-    // set to work is not called, so it's not expecting xthinblock
-    CDataStream s = stream(xblock);
-    DummyXThinProcessor process(pfrom, worker, headerprocessor);
-    process(s, NullFinder());
-    BOOST_CHECK(worker.isAvailable());
-    BOOST_CHECK(!worker.buildStubCalled);
 }
 
 BOOST_AUTO_TEST_CASE(xthinblock_header_is_processed) {
     XThinWorker worker(tmgr, 42);
     XThinBlock xblock(TestBlock1(), CBloomFilter());
-    worker.setToWork(xblock.header.GetHash());
+    worker.addWork(xblock.header.GetHash());
     CDataStream s = stream(xblock);
     DummyXThinProcessor process(pfrom, worker, headerprocessor);
     process(s, NullFinder());
 
     BOOST_CHECK(headerprocessor.called);
-    BOOST_CHECK(worker.isStubBuilt());
-    BOOST_CHECK(!worker.isAvailable());
+    BOOST_CHECK(worker.isStubBuilt(xblock.header.GetHash()));
+    BOOST_CHECK(worker.isWorkingOn(xblock.header.GetHash()));
 }
 
 BOOST_AUTO_TEST_CASE(xthinblock_stop_if_header_fails) {
     XThinWorker worker(tmgr, 42);
     XThinBlock xblock(TestBlock1(), CBloomFilter());
-    worker.setToWork(xblock.header.GetHash());
+    worker.addWork(xblock.header.GetHash());
     headerprocessor.headerOK = false;
     CDataStream s = stream(xblock);
     DummyXThinProcessor process(pfrom, worker, headerprocessor);
     process(s, NullFinder());
 
-    BOOST_CHECK(worker.isAvailable());
-    BOOST_CHECK(!worker.isStubBuilt());
+    BOOST_CHECK(!worker.isWorkingOn(xblock.header.GetHash()));
+    BOOST_CHECK(!worker.isStubBuilt(xblock.header.GetHash()));
 }
 
 BOOST_AUTO_TEST_CASE(xthinblock_rerequest_missing) {
@@ -276,14 +266,14 @@ BOOST_AUTO_TEST_CASE(xthinblock_rerequest_missing) {
     XThinBlock xblock(testblock, CBloomFilter());
     XThinWorker worker(tmgr, 42);
 
-    worker.setToWork(xblock.header.GetHash());
+    worker.addWork(xblock.header.GetHash());
     CDataStream s = stream(xblock);
     DummyXThinProcessor process(pfrom, worker, headerprocessor);
     process(s, NullFinder());
 
     BOOST_CHECK(headerprocessor.called);
-    BOOST_CHECK(worker.isStubBuilt());
-    BOOST_CHECK(!worker.isAvailable());
+    BOOST_CHECK(worker.isStubBuilt(xblock.header.GetHash()));
+    BOOST_CHECK(worker.isWorkingOn(xblock.header.GetHash()));
 
     // should have re-requested missing transaction
     BOOST_CHECK_EQUAL("get_xblocktx", pfrom.messages.at(0));

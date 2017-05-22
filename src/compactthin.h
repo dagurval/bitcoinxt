@@ -20,6 +20,8 @@ class CompactWorker : public ThinBlockWorker {
 
         void requestBlock(const uint256& block,
                 std::vector<CInv>& getDataReq, CNode& node) override;
+
+        bool supportsParallel() const override { return true; }
 };
 
 

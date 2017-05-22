@@ -89,8 +89,8 @@ BlockAnnounceReceiver::DownloadStrategy BlockAnnounceReceiver::pickDownloadStrat
     }
 
     if (!state->thinblock->isAvailable()) {
-        LogPrint("thin", "peer %d is busy with %s, won't req %s\n",
-                from.id, state->thinblock->blockStr(), block.ToString());
+        LogPrint("thin", "peer busy, won't req %s peer=%d\n",
+                block.ToString(), from.id);
         return DOWNL_THIN_LATER;
     }
     return DOWNL_THIN_NOW;
@@ -120,7 +120,7 @@ bool BlockAnnounceReceiver::onBlockAnnounced(std::vector<CInv>& toFetch) {
             block.ToString(), from.id, (numDownloading + 1), Opt().ThinBlocksMaxParallel());
 
         nodestate->thinblock->requestBlock(block, toFetch, from);
-        nodestate->thinblock->setToWork(block);
+        nodestate->thinblock->addWork(block);
         return true;
     }
 

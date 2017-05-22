@@ -22,24 +22,23 @@ struct DummyBloomConcluder : public BloomBlockConcluder {
     {
     }
 
-    virtual void giveUp(CNode* pfrom, ThinBlockWorker& worker) {
+    void giveUp(const uint256& block, CNode* pfrom,
+            ThinBlockWorker& worker) override {
         giveUpCalled++;
-        BloomBlockConcluder::giveUp(pfrom, worker);
+        BloomBlockConcluder::giveUp(block, pfrom, worker);
     }
 
-    virtual void reRequest(
-        CNode* pfrom,
-        ThinBlockWorker& worker,
-        uint64_t nonce)
+    void reRequest(const uint256& block, CNode* pfrom,
+            ThinBlockWorker& worker, uint64_t nonce) override
     {
         reRequestCalled++;
-        BloomBlockConcluder::reRequest(pfrom, worker, nonce);
+        BloomBlockConcluder::reRequest(block, pfrom, worker, nonce);
     }
-    virtual void fallbackDownload(CNode *pfrom, const uint256& block) {
+    void fallbackDownload(CNode *pfrom, const uint256& block) override {
         fallbackDownloadCalled++;
         BloomBlockConcluder::fallbackDownload(pfrom, block);
     }
-    virtual void misbehaving(NodeId, int howmuch) {
+    void misbehaving(NodeId, int howmuch) override {
         misbehave = howmuch;
     }
 
@@ -80,10 +79,10 @@ struct ConcluderSetup {
 BOOST_FIXTURE_TEST_SUITE(thinblockconcluder_tests, ConcluderSetup);
 
 // The normal case. Block is finished (and worker is available).
-BOOST_AUTO_TEST_CASE(block_complete) {
+BOOST_AUTO_TEST_CASE(bloomthin_block_complete) {
 
     BloomThinWorker worker(tmgr, 42);
-    worker.setAvailable();
+    worker.stopAllWork();
 
     DummyBloomConcluder c;
     c(&pfrom, nonce, worker);
@@ -95,47 +94,47 @@ BOOST_AUTO_TEST_CASE(block_complete) {
 // This should only happen if the peer does not support bloom filter.
 BOOST_AUTO_TEST_CASE(merkleblock_not_provided) {
     BloomThinWorker worker(tmgr, 42);
-    uint256 dummyhash;
-    dummyhash.SetHex("0xDEADBEA7");
+    uint256 dummyhash = uint256S("0xF00");
     pfrom.thinBlockNonceBlock = dummyhash;
-    worker.setToWork(dummyhash);
+    worker.addWork(dummyhash);
     DummyBloomConcluder c;
     c(&pfrom, nonce, worker);
 
     BOOST_CHECK_EQUAL(0, c.giveUpCalled);
     BOOST_CHECK_EQUAL(0, c.reRequestCalled);
     BOOST_CHECK_EQUAL(20, c.misbehave);
-    BOOST_CHECK(worker.isAvailable());
+    BOOST_CHECK(!worker.isWorkingOn(dummyhash));
 }
 
 // Peer does not provide all transactions. We re-request them,
 // and peer is able to provide.
 BOOST_AUTO_TEST_CASE(rerequest_success) {
     BloomThinWorker worker(tmgr, 42);
-    pfrom.thinBlockNonceBlock = mblock.header.GetHash();
-    worker.setToWork(mblock.header.GetHash());
-    worker.buildStub(ThinBloomStub(mblock), NullFinder());
-    BOOST_CHECK(!worker.isReRequesting());
+    uint256 hash = mblock.header.GetHash();
+    pfrom.thinBlockNonceBlock = hash;
+    worker.addWork(hash);
+    worker.buildStub(pfrom, ThinBloomStub(mblock), NullFinder());
+    BOOST_CHECK(!worker.isReRequesting(hash));
 
     DummyBloomConcluder c;
     c(&pfrom, nonce, worker);
     BOOST_CHECK_EQUAL(1, c.reRequestCalled);
     BOOST_CHECK_EQUAL(0, c.giveUpCalled);
-    BOOST_CHECK(worker.isReRequesting());
-    BOOST_CHECK_EQUAL(mblock.header.GetHash().ToString(), pfrom.thinBlockNonceBlock.ToString());
+    BOOST_CHECK(worker.isReRequesting(hash));
+    BOOST_CHECK_EQUAL(hash.ToString(), pfrom.thinBlockNonceBlock.ToString());
     BOOST_CHECK_EQUAL(nonce, pfrom.thinBlockNonce);
 
     // Provide all the transactions.
     std::vector<CTransaction> txs = block.vtx;
     typedef std::vector<CTransaction>::const_iterator auto_;
     for (auto_ t = txs.begin(); t != txs.end(); ++t)
-        BOOST_CHECK(worker.addTx(*t));
+        BOOST_CHECK(worker.addTx(hash, *t));
 
     DummyBloomConcluder c2;
     c2(&pfrom, nonce, worker);
     BOOST_CHECK_EQUAL(0, c2.reRequestCalled);
     BOOST_CHECK_EQUAL(0, c2.giveUpCalled);
-    BOOST_CHECK(worker.isAvailable());
+    BOOST_CHECK(!worker.isWorkingOn(hash));
     BOOST_CHECK_EQUAL(0, pfrom.thinBlockNonce);
 }
 
@@ -143,9 +142,9 @@ BOOST_AUTO_TEST_CASE(re_request_not_fulfilled_one_worker) {
     CBloomFilter emptyFilter;
 
     BloomThinWorker worker(tmgr, 42);
-    worker.setToWork(mblock.header.GetHash());
-    worker.buildStub(ThinBloomStub(mblock), NullFinder());
-    worker.setReRequesting(true);
+    worker.addWork(mblock.header.GetHash());
+    worker.buildStub(pfrom, ThinBloomStub(mblock), NullFinder());
+    worker.setReRequesting(mblock.header.GetHash(), true);
     pfrom.thinBlockNonceBlock = mblock.header.GetHash();
 
     // We have re-requested the missing transactions, but block is still incomplete.
@@ -166,11 +165,11 @@ BOOST_AUTO_TEST_CASE(re_request_not_fulfilled_multiple_workers) {
 
     BloomThinWorker worker1(tmgr, 42);
     BloomThinWorker worker2(tmgr, 24);
-    worker1.setToWork(mblock.header.GetHash());
-    worker2.setToWork(mblock.header.GetHash());
-    worker1.buildStub(ThinBloomStub(mblock), NullFinder());
-    worker1.setReRequesting(true);
-    worker2.setReRequesting(true);
+    worker1.addWork(mblock.header.GetHash());
+    worker2.addWork(mblock.header.GetHash());
+    worker1.buildStub(pfrom, ThinBloomStub(mblock), NullFinder());
+    worker1.setReRequesting(mblock.header.GetHash(), true);
+    worker2.setReRequesting(mblock.header.GetHash(), true);
     pfrom.thinBlockNonceBlock = mblock.header.GetHash();
 
     DummyBloomConcluder c;
@@ -201,7 +200,7 @@ BOOST_AUTO_TEST_CASE(ignore_old_pongs) {
     pfrom.thinBlockNonce = nonce;
     pfrom.thinBlockNonceBlock = dummyhash1;
     BloomThinWorker worker(tmgr, 42);
-    worker.setToWork(dummyhash2); // working on next block
+    worker.addWork(dummyhash2); // working on next block
     DummyBloomConcluder c;
     c(&pfrom, pfrom.thinBlockNonce, worker);
 
@@ -222,7 +221,7 @@ BOOST_AUTO_TEST_CASE(xthin_concluder) {
         DummyWorker(ThinBlockManager& mg, NodeId id) :
             XThinWorker(mg, id), addTxCalled(false) { }
 
-        bool addTx(const CTransaction& tx) override {
+        bool addTx(const uint256& block, const CTransaction& tx) override {
             addTxCalled = true;
             return true;
         }
@@ -234,18 +233,17 @@ BOOST_AUTO_TEST_CASE(xthin_concluder) {
     XThinBlockConcluder conclude;
     // Should ignore since worker is not working
     // on anything.
-    worker.setAvailable();
     conclude(resp, pfrom, worker);
     BOOST_CHECK(!worker.addTxCalled);
 
     // Should ignore since worker is assigned to a
     // different block.
-    worker.setToWork(uint256S("0xf00d"));
+    worker.addWork(uint256S("0xf00d"));
     conclude(resp, pfrom, worker);
     BOOST_CHECK(!worker.addTxCalled);
 
     // Should add tx.
-    worker.setToWork(resp.block);
+    worker.addWork(resp.block);
     conclude(resp, pfrom, worker);
 }
 
@@ -259,7 +257,7 @@ BOOST_AUTO_TEST_CASE(compact_concluder) {
         DummyWorker(ThinBlockManager& mg, NodeId id) :
             CompactWorker(mg, id), addTxCalled(false) { }
 
-        bool addTx(const CTransaction& tx) override {
+        bool addTx(const uint256& block, const CTransaction& tx) override {
             addTxCalled = true;
             return true;
         }
@@ -271,18 +269,17 @@ BOOST_AUTO_TEST_CASE(compact_concluder) {
     CompactBlockConcluder conclude;
     // Should ignore since worker is not working
     // on anything.
-    worker.setAvailable();
     conclude(resp, pfrom, worker);
     BOOST_CHECK(!worker.addTxCalled);
 
     // Should ignore since worker is assigned to a
     // different block.
-    worker.setToWork(uint256S("0xf00d"));
+    worker.addWork(uint256S("0xf00d"));
     conclude(resp, pfrom, worker);
     BOOST_CHECK(!worker.addTxCalled);
 
     // Should add tx.
-    worker.setToWork(resp.blockhash);
+    worker.addWork(resp.blockhash);
     conclude(resp, pfrom, worker);
 };
 

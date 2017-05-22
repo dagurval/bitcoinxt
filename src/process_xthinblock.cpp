@@ -31,34 +31,37 @@ void XThinBlockProcessor::operator()(
     }
 
     if (requestConnectHeaders(block.header)) {
-        worker.setAvailable();
+        worker.stopWork(hash);
         return;
     }
 
-    if (!processHeader(block.header))
+    if (!processHeader(block.header)) {
+        worker.stopWork(hash);
         return;
-
-    from.AddInventoryKnown(CInv(MSG_XTHINBLOCK, hash));
+    }
 
     if (!setToWork(hash))
         return;
 
+    from.AddInventoryKnown(CInv(MSG_XTHINBLOCK, hash));
+
     try {
         XThinStub stub(block);
-        worker.buildStub(stub, txfinder);
+        worker.buildStub(from, stub, txfinder);
     }
     catch (const thinblock_error& e) {
         rejectBlock(hash, e.what(), 10);
         return;
     }
 
-    // If the stub was enough to finish the block then
-    // the worker will be available.
-    if (worker.isAvailable())
+    if (!worker.isWorkingOn(hash)) {
+        // Stub had enough data to finish
+        // the block.
         return;
+    }
 
     // Request missing
-    std::vector<ThinTx> missing = worker.getTxsMissing();
+    std::vector<ThinTx> missing = worker.getTxsMissing(hash);
     assert(!missing.empty());
 
     XThinReRequest req;
