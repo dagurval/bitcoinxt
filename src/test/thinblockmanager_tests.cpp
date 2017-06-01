@@ -1,4 +1,4 @@
-// Copyright (c) 2016- The Bitcoin XT developers
+// Copyright (c) 2016-2017 The Bitcoin XT developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <boost/test/unit_test.hpp>
@@ -34,6 +34,33 @@ BOOST_AUTO_TEST_CASE(add_and_del_worker) {
     worker->setToWork(block);
     worker.reset();
     BOOST_CHECK_EQUAL(0, mg->numWorkers(block));
+};
+
+BOOST_AUTO_TEST_CASE(add_tx_all_blocks) {
+
+    std::unique_ptr<ThinBlockManager> mg = GetDummyThinBlockMg();
+    XThinWorker worker1(*mg, 42);
+    XThinWorker worker2(*mg, 42);
+
+    CBlock block1 = TestBlock1();
+    CBlock block2 = TestBlock2();
+
+    worker1.setToWork(block1.GetHash());
+    worker2.setToWork(block2.GetHash());
+
+    mg->buildStub(XThinStub(XThinBlock(block1, CBloomFilter{})), NullFinder{});
+    mg->buildStub(XThinStub(XThinBlock(block2, CBloomFilter{})), NullFinder{});
+
+    size_t numMissing1 = mg->getTxsMissing(block1.GetHash()).size();
+    size_t numMissing2 = mg->getTxsMissing(block2.GetHash()).size();
+
+    mg->addTxAllBlocks(block2.vtx[1]);
+    BOOST_CHECK_EQUAL(
+            numMissing1,
+            mg->getTxsMissing(block1.GetHash()).size());
+    BOOST_CHECK_EQUAL(
+            numMissing2 - 1,
+            mg->getTxsMissing(block2.GetHash()).size());
 };
 
 BOOST_AUTO_TEST_SUITE_END();

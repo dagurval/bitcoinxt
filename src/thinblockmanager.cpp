@@ -140,6 +140,12 @@ bool ThinBlockManager::addTx(const uint256& block, const CTransaction& tx) {
     return true;
 }
 
+// Try to add a transaction to any block we're working on.
+void ThinBlockManager::addTxAllBlocks(const CTransaction& tx) {
+    for (auto& kv : builders)
+        addTx(kv.first, tx);
+}
+
 void ThinBlockManager::removeIfExists(const uint256& h) {
     if (!builders.count(h))
         return;

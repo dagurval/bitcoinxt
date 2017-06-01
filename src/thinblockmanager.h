@@ -53,6 +53,7 @@ class ThinBlockManager : boost::noncopyable {
         bool isStubBuilt(const uint256& block);
 
         bool addTx(const uint256& block, const CTransaction& tx);
+        void addTxAllBlocks(const CTransaction& tx);
         void removeIfExists(const uint256& block);
         std::vector<ThinTx> getTxsMissing(const uint256& block) const;
 
