@@ -4993,6 +4993,9 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
     }
 
     else if (strCommand == "sendcmpct") {
+        if (!Opt().UsingThinBlocks())
+            return true;
+
         bool highBandwidth = false;
         uint64_t version = 1;
         vRecv >> highBandwidth >> version;
@@ -5407,6 +5410,8 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
     }
     else if (strCommand == "xthinblock" && !fImporting && !fReindex) // Ignore blocks received while importing
     {
+        if (!Opt().UsingThinBlocks())
+            return true;
         // We are receiving a xthin block.
         try {
             LOCK(cs_main);
@@ -5424,6 +5429,8 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
     }
     else if (strCommand == "cmpctblock" && !fImporting && !fReindex) // Ignore blocks received while importing
     {
+        if (!Opt().UsingThinBlocks())
+            return true;
         // We are receiving a compact block.
         try {
             LOCK(cs_main);
@@ -5465,6 +5472,8 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         callb(block, std::vector<NodeId>(1, pfrom->id));
     }
     else if (strCommand == "get_xthin") {
+        if (!Opt().UsingThinBlocks())
+            return true;
         CBloomFilter dontWant;
         CInv inv;
 
@@ -5486,6 +5495,8 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
 
     }
     else if (strCommand == "get_xblocktx") {
+        if (!Opt().UsingThinBlocks())
+            return true;
         // This is a request for transactions that remote peer wanted
         // as part of a xthinblock, but were not provided.
 
@@ -5511,6 +5522,8 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         }
     }
     else if (strCommand == "xblocktx") {
+        if (!Opt().UsingThinBlocks())
+            return true;
         // This is a response for us requesting missing transactions from
         // xthinblocks.
 
@@ -5525,6 +5538,8 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
     }
 
     else if (strCommand == "blocktxn") {
+        if (!Opt().UsingThinBlocks())
+            return true;
         // This is a response for us requesting missing transactions from
         // xthinblocks.
 

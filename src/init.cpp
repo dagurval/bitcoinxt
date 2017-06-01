@@ -751,6 +751,12 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
             LogPrintf("%s: parameter interaction: -zapwallettxes=<mode> -> setting -rescan=1\n", __func__);
     }
 
+    // -stealth-mode disables thin blocks
+    if (Opt().IsStealthMode()) {
+        if (SoftSetArg("-use-thin-blocks", 0))
+            LogPrintf("%s: parameter interaction: -stealth-mode -> setting -use-thin-blocks=0\n", __func__);
+    }
+
     // Make sure enough file descriptors are available
     int nBind = std::max((int)mapArgs.count("-bind") + (int)mapArgs.count("-whitebind"), 1);
     nMaxConnections = GetArg("-maxconnections", 125);
