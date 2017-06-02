@@ -5486,7 +5486,8 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
 
         LOCK(cs_main);
         NodeStatePtr statePtr(pfrom->id);
-        XThinBlockConcluder()(resp, *pfrom, *(statePtr->thinblock));
+        MarkBlockAsInFlight m;
+        XThinBlockConcluder()(resp, *pfrom, *(statePtr->thinblock), m);
     }
 
     else if (strCommand == "blocktxn") {
@@ -5502,7 +5503,8 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
 
         LOCK(cs_main);
         NodeStatePtr statePtr(pfrom->id);
-        CompactBlockConcluder()(resp, *pfrom, *(statePtr->thinblock));
+        MarkBlockAsInFlight m;
+        CompactBlockConcluder()(resp, *pfrom, *(statePtr->thinblock), m);
     }
 
     // This asymmetric behavior for inbound and outbound connections was introduced
