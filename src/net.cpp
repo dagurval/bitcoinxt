@@ -420,7 +420,7 @@ CNode* ConnectNode(CAddress addrConnect, const char *pszDest, bool fCountFailure
 void CNode::CloseSocketDisconnect()
 {
     fDisconnect = true;
-    LOCK(cs_hSocket);
+    std::lock_guard<std::mutex> socketLock(cs_hSocket);
     if (hSocket != INVALID_SOCKET)
     {
         LogPrint("net", "disconnecting peer=%d\n", id);
@@ -682,7 +682,7 @@ void SocketSendData(CNode *pnode)
         }
         int nBytes = 0;
         {
-            LOCK(pnode->cs_hSocket);
+            std::lock_guard<std::mutex> socketLock(pnode->cs_hSocket);
             if (pnode->hSocket == INVALID_SOCKET)
                 break;
             nBytes = send(pnode->hSocket, &data[pnode->nSendOffset], amt2Send, MSG_NOSIGNAL | MSG_DONTWAIT);
@@ -829,7 +829,7 @@ void ThreadSocketHandler()
             LOCK(cs_vNodes);
             BOOST_FOREACH(CNode* pnode, vNodes)
             {
-                LOCK(pnode->cs_hSocket);
+                std::lock_guard<std::mutex> socketLock(pnode->cs_hSocket);
                 if (pnode->hSocket == INVALID_SOCKET)
                     continue;
                 FD_SET(pnode->hSocket, &fdsetError);
@@ -999,7 +999,7 @@ void ThreadSocketHandler()
             bool sendSet = false;
             bool errorSet = false;
             {
-                LOCK(pnode->cs_hSocket);
+                std::lock_guard<std::mutex> socketLock(pnode->cs_hSocket);
                 if (pnode->hSocket == INVALID_SOCKET)
                     continue;
                 recvSet = FD_ISSET(pnode->hSocket, &fdsetRecv);
@@ -1019,7 +1019,7 @@ void ThreadSocketHandler()
                         char *pchBuf = new char[amt];
                         int nBytes = 0;
                         {
-                            LOCK(pnode->cs_hSocket);
+                            std::lock_guard<std::mutex> socketLock(pnode->cs_hSocket);
                             if (pnode->hSocket == INVALID_SOCKET)
                                 continue;
                             nBytes = recv(pnode->hSocket, pchBuf, amt, MSG_DONTWAIT);

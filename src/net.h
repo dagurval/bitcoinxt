@@ -22,6 +22,7 @@
 
 #include <deque>
 #include <stdint.h>
+#include <mutex>
 
 #ifndef WIN32
 #include <arpa/inet.h>
@@ -259,7 +260,7 @@ public:
     uint64_t nSendBytes;
     std::deque<CSerializeData> vSendMsg;
     CCriticalSection cs_vSend;
-    CCriticalSection cs_hSocket;
+    std::mutex cs_hSocket;
 
     std::deque<CInv> vRecvGetData;
     std::deque<CNetMessage> vRecvMsg;
