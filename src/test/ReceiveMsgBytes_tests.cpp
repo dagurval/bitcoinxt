@@ -17,6 +17,7 @@
 #include "test/test_bitcoin.h"
 
 #include <boost/test/unit_test.hpp>
+#include <mutex>
 
 BOOST_FIXTURE_TEST_SUITE(ReceiveMsgBytes_tests, TestingSetup)
 
@@ -30,7 +31,7 @@ BOOST_AUTO_TEST_CASE(FullMessages)
     s << (uint64_t)11; // ping nonce
     CNetMessage::FinalizeHeader(s);
 
-    LOCK(testNode.cs_vRecvMsg);
+    std::lock_guard lock<std::recursive_mutex>(testNode.cs_vRecvMsg);
 
     // Receive a full 'ping' message
     {

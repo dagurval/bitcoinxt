@@ -428,8 +428,8 @@ void CNode::CloseSocketDisconnect()
     }
 
     // in case this fails, we'll empty the recv buffer when the CNode is deleted
-    TRY_LOCK(cs_vRecvMsg, lockRecv);
-    if (lockRecv)
+    std::unique_lock<std::recursive_mutex> lockRecv(cs_vRecvMsg, std::try_to_lock);
+    if (lockRecv.owns_lock())
         vRecvMsg.clear();
 }
 
@@ -781,8 +781,8 @@ void ThreadSocketHandler()
                         TRY_LOCK(pnode->cs_vSend, lockSend);
                         if (lockSend)
                         {
-                            TRY_LOCK(pnode->cs_vRecvMsg, lockRecv);
-                            if (lockRecv)
+                            std::unique_lock<std::recursive_mutex> lockRecv(pnode->cs_vRecvMsg, std::try_to_lock);
+                            if (lockRecv.owns_lock())
                             {
                                 TRY_LOCK(pnode->cs_inventory, lockInv);
                                 if (lockInv)
@@ -859,8 +859,8 @@ void ThreadSocketHandler()
                     }
                 }
                 {
-                    TRY_LOCK(pnode->cs_vRecvMsg, lockRecv);
-                    if (lockRecv && (
+                    std::unique_lock<std::recursive_mutex> lockRecv(pnode->cs_vRecvMsg, std::try_to_lock);
+                    if (lockRecv.owns_lock() && (
                         pnode->vRecvMsg.empty() || !pnode->vRecvMsg.front().complete() ||
                         pnode->GetTotalRecvSize() <= ReceiveFloodSize()))
                         FD_SET(pnode->hSocket, &fdsetRecv);
@@ -1008,9 +1008,9 @@ void ThreadSocketHandler()
             }
             if (recvSet || errorSet)
             {
-                TRY_LOCK(pnode->cs_vRecvMsg, lockRecv);
+                std::unique_lock<std::recursive_mutex> lockRecv(pnode->cs_vRecvMsg, std::try_to_lock);
                 const int amt2Recv = receiveShaper.available(RECV_SHAPER_MIN_FRAG);
-                if (lockRecv && amt2Recv > 0)
+                if (lockRecv.owns_lock() && amt2Recv > 0)
                 {
                     {
                         progress++;
@@ -1580,8 +1580,8 @@ void ThreadMessageHandler()
 
             // Receive messages
             {
-                TRY_LOCK(pnode->cs_vRecvMsg, lockRecv);
-                if (lockRecv)
+                std::unique_lock<std::recursive_mutex> lockRecv(pnode->cs_vRecvMsg, std::try_to_lock);
+                if (lockRecv.owns_lock())
                 {
                     if (!g_signals.ProcessMessages(pnode))
                         pnode->CloseSocketDisconnect();

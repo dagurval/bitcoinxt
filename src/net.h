@@ -264,7 +264,7 @@ public:
 
     std::deque<CInv> vRecvGetData;
     std::deque<CNetMessage> vRecvMsg;
-    CCriticalSection cs_vRecvMsg;
+    std::recursive_mutex cs_vRecvMsg;
     uint64_t nRecvBytes;
     int nRecvVersion;
 
