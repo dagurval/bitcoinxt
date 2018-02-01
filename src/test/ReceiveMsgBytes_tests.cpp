@@ -31,7 +31,7 @@ BOOST_AUTO_TEST_CASE(FullMessages)
     s << (uint64_t)11; // ping nonce
     CNetMessage::FinalizeHeader(s);
 
-    std::lock_guard lock<std::recursive_mutex>(testNode.cs_vRecvMsg);
+    std::lock_guard<std::recursive_mutex> lock(testNode.cs_vRecvMsg);
 
     // Receive a full 'ping' message
     {
