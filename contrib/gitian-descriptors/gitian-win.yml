@@ -1,8 +1,9 @@
 ---
 name: "bitcoin-win-0.11"
 enable_cache: true
+sudo: true
 suites:
-- "trusty"
+- "bionic"
 architectures:
 - "amd64"
 packages:
@@ -20,6 +21,7 @@ packages:
 - "zip"
 - "ca-certificates"
 - "python"
+- "rename"
 remotes:
 - "url": "https://github.com/bitcoinxt/bitcoinxt.git"
   "dir": "bitcoin"
@@ -90,6 +92,9 @@ script: |
     done
   done
   }
+  for i in $HOSTS; do
+    sudo update-alternatives --set ${i}-g++ $(which ${i}-g++-posix)
+  done
 
   # Faketime for depends so intermediate results are comparable
   export PATH_orig=${PATH}
