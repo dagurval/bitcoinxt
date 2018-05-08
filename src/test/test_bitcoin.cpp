@@ -13,6 +13,7 @@
 #include "rpc/register.h"
 #include "rpc/server.h"
 #include "txdb.h"
+#include "trimmablecoinscache.h"
 #include "txmempool.h"
 #include "ui_interface.h"
 
@@ -55,7 +56,7 @@ TestingSetup::TestingSetup(const std::string& chainName) : BasicTestingSetup(cha
         bool isObfuscated;
         pblocktree = new CBlockTreeDB(1 << 20, isObfuscated, true);
         pcoinsdbview = new CCoinsViewDB(1 << 23, isObfuscated, true);
-        pcoinsTip = new CCoinsViewCache(pcoinsdbview);
+        pcoinsTip = new TrimmableCoinsCache(pcoinsdbview);
         InitBlockIndex();
         mapArgs["-par"] = "3";
         for (int i=0; i < Opt().ScriptCheckThreads()-1; i++)

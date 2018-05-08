@@ -605,7 +605,7 @@ CBlockIndex* FindForkInGlobalIndex(const CChain& chain, const CBlockLocator& loc
     return chain.Genesis();
 }
 
-CCoinsViewCache *pcoinsTip = NULL;
+TrimmableCoinsCache* pcoinsTip = NULL;
 CBlockTreeDB *pblocktree = NULL;
 
 //////////////////////////////////////////////////////////////////////////////
@@ -5060,6 +5060,11 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv,
                                state.GetRejectReason().substr(0, MAX_REJECT_MESSAGE_LENGTH), inv.hash);
             if (nDoS > 0)
                 Misbehaving(pfrom->GetId(), nDoS, "tx rejected: " + state.GetRejectReason());
+        }
+
+        if (!pcoinsTip->Trim(static_cast<size_t>(nCoinCacheUsage * 0.9))) {
+            // Can't keep coins cache within its limits. Time to flush.
+            FlushStateToDisk(state, FLUSH_STATE_PERIODIC);
         }
     }
     else if (strCommand == "headers" && !fImporting && !fReindex) // Ignore headers received while importing

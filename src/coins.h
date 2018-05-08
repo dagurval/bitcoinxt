@@ -224,7 +224,7 @@ public:
      * more efficient than GetCoin. Modifications to other cache entries are
      * allowed while accessing the returned pointer.
      */
-    const Coin& AccessCoin(const COutPoint &output) const;
+    virtual const Coin& AccessCoin(const COutPoint &output) const;
 
     /**
      * Add a coin. Set potential_overwrite to true if a non-pruned version may
@@ -237,20 +237,20 @@ public:
      * If no unspent output exists for the passed outpoint, this call
      * has no effect.
      */
-    void SpendCoin(const COutPoint &outpoint, Coin* moveto = nullptr);
+    virtual void SpendCoin(const COutPoint &outpoint, Coin* moveto = nullptr);
 
     /**
      * Push the modifications applied to this cache to its base.
      * Failure to call this method before destruction will cause the changes to be forgotten.
      * If false is returned, the state of this cache (and its backing view) will be undefined.
      */
-    bool Flush();
+    virtual bool Flush();
 
     /**
      * Removes the UTXO with the given outpoint from the cache, if it is
      * not modified.
      */
-    void Uncache(const COutPoint &outpoint);
+    virtual void Uncache(const COutPoint &outpoint);
 
     //! Calculate the size of the cache (in number of transaction outputs)
     unsigned int GetCacheSize() const;

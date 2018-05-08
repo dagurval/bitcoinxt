@@ -28,6 +28,7 @@
 #include "script/sigcache.h"
 #include "scheduler.h"
 #include "timedata.h"
+#include "trimmablecoinscache.h"
 #include "txdb.h"
 #include "ui_interface.h"
 #include "util.h"
@@ -1283,7 +1284,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                 pblocktree = new CBlockTreeDB(nBlockTreeDBCache, blockDbScrambled, false, fReindex);
                 pcoinsdbview = new CCoinsViewDB(nCoinDBCache, chainstateScrambled, false, fReindex || fReindexChainState);
                 pcoinscatcher = new CCoinsViewErrorCatcher(pcoinsdbview);
-                pcoinsTip = new CCoinsViewCache(pcoinscatcher);
+                pcoinsTip = new TrimmableCoinsCache(pcoinscatcher);
 
                 if (fReindex) {
                     pblocktree->WriteReindexing(true);

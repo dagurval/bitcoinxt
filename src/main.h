@@ -22,6 +22,7 @@
 #include "script/standard.h"
 #include "sync.h"
 #include "tinyformat.h"
+#include "trimmablecoinscache.h"
 #include "txmempool.h"
 #include "uint256.h"
 #include "versionbits.h"
@@ -434,7 +435,7 @@ bool ReconsiderBlock(CValidationState& state, CBlockIndex *pindex);
 extern CChain chainActive;
 
 /** Global variable that points to the active CCoinsView (protected by cs_main) */
-extern CCoinsViewCache *pcoinsTip;
+extern TrimmableCoinsCache *pcoinsTip;
 
 /** Global variable that points to the active block tree (protected by cs_main) */
 extern CBlockTreeDB *pblocktree;
