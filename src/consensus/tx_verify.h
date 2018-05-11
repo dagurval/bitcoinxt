@@ -7,11 +7,13 @@
 
 #include <stdint.h>
 #include <vector>
+#include <functional>
 
 class CBlockIndex;
-class CCoinsViewCache;
+class COutPoint;
 class CTransaction;
 class CValidationState;
+class CCoinsView;
 
 /** Transaction validation functions */
 
@@ -24,7 +26,8 @@ namespace Consensus {
  * This does not modify the UTXO set. This does not check scripts and sigs.
  * Preconditions: tx.IsCoinBase() is false.
  */
-bool CheckTxInputs(const CTransaction& tx, CValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight);
+bool CheckTxInputs(const CTransaction& tx, CValidationState& state,
+                   const CCoinsView& inputs, int nSpendHeight);
 } // namespace Consensus
 
 /** Auxiliary functions for transaction validation (ideally should not be exposed) */
@@ -43,7 +46,8 @@ unsigned int GetLegacySigOpCount(const CTransaction& tx);
  * @return maximum number of sigops required to validate this transaction's inputs
  * @see CTransaction::FetchInputs
  */
-unsigned int GetP2SHSigOpCount(const CTransaction& tx, const CCoinsViewCache& mapInputs);
+unsigned int GetP2SHSigOpCount(const CTransaction& tx, CCoinsView& view);
+
 
 /**
  * Check if transaction is final and can be included in a block with the

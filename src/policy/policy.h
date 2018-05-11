@@ -12,7 +12,7 @@
 
 #include <string>
 
-class CCoinsViewCache;
+class CCoinsView;
 
 /** Default for -blockprioritysize, maximum space for zero/low-fee transactions **/
 static const unsigned int DEFAULT_BLOCK_PRIORITY_SIZE = 50000;
@@ -53,9 +53,9 @@ bool IsStandard(const CScript& scriptPubKey, txnouttype& whichType);
 bool IsStandardTx(const CTransaction& tx, std::string& reason);
     /**
      * Check for standard transaction types
-     * @param[in] mapInputs    Map of previous transactions that have outputs we're spending
+     * @param[in] accessCoin    Fetch outputs we're spending
      * @return True if all inputs (scriptSigs) use only standard transaction forms
      */
-bool AreInputsStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs);
+bool AreInputsStandard(const CTransaction& tx, const CCoinsView&);
 
 #endif // BITCOIN_POLICY_H

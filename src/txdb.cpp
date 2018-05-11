@@ -73,7 +73,9 @@ uint256 CCoinsViewDB::GetBestBlock() const {
     return hashBestChain;
 }
 
-bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
+bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock,
+                              PreEraseCallb* preErase)
+{
     CDBBatch batch;
     size_t count = 0;
     size_t changed = 0;
@@ -88,6 +90,8 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
         }
         count++;
         CCoinsMap::iterator itOld = it++;
+        if (preErase)
+            (*preErase)(itOld);
         mapCoins.erase(itOld);
     }
     if (!hashBlock.IsNull())
@@ -96,6 +100,14 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
     bool ret = db.WriteBatch(batch);
     LogPrint(Log::COINDB, "Committed %u changed transaction outputs (out of %u) to coin database...\n", (unsigned int)changed, (unsigned int)count);
     return ret;
+}
+
+const Coin& CCoinsViewDB::AccessCoin(const COutPoint &outpoint, Coin* buffer) const {
+    if (buffer == nullptr)
+        throw std::invalid_argument("CoinsViewDB::AccessCoin requires buffer");
+    if (!GetCoin(outpoint, *buffer))
+        *buffer = Coin{}; // empty coin
+    return *buffer;
 }
 
 size_t CCoinsViewDB::EstimateSize() const

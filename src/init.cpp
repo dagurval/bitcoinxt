@@ -14,6 +14,7 @@
 #include "checkpoints.h"
 #include "compat/sanity.h"
 #include "consensus/validation.h"
+#include "coinsreadcache.h"
 #include "httpserver.h"
 #include "httprpc.h"
 #include "key.h"
@@ -148,6 +149,7 @@ public:
 
 static CCoinsViewDB *pcoinsdbview = NULL;
 static CCoinsViewErrorCatcher *pcoinscatcher = NULL;
+static std::unique_ptr<CoinsReadCache> pcoinsreadcache = nullptr;
 static boost::scoped_ptr<ECCVerifyHandle> globalVerifyHandle;
 
 void Interrupt(boost::thread_group& threadGroup)
@@ -213,6 +215,7 @@ void Shutdown()
         pcoinscatcher = NULL;
         delete pcoinsdbview;
         pcoinsdbview = NULL;
+        pcoinsreadcache.reset();
         delete pblocktree;
         pblocktree = NULL;
     }
@@ -1274,6 +1277,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                 UnloadBlockIndex();
                 delete pcoinsTip;
                 delete pcoinsdbview;
+                pcoinsreadcache.reset();
                 delete pcoinscatcher;
                 delete pblocktree;
 
@@ -1284,7 +1288,8 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                 pblocktree = new CBlockTreeDB(nBlockTreeDBCache, blockDbScrambled, false, fReindex);
                 pcoinsdbview = new CCoinsViewDB(nCoinDBCache, chainstateScrambled, false, fReindex || fReindexChainState);
                 pcoinscatcher = new CCoinsViewErrorCatcher(pcoinsdbview);
-                pcoinsTip = new CCoinsViewCache(pcoinscatcher);
+                pcoinsreadcache.reset(new CoinsReadCache(pcoinscatcher));
+                pcoinsTip = new CCoinsViewCache(pcoinsreadcache.get());
 
                 if (fReindex) {
                     pblocktree->WriteReindexing(true);

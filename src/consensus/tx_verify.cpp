@@ -121,15 +121,16 @@ unsigned int GetLegacySigOpCount(const CTransaction& tx)
     return nSigOps;
 }
 
-unsigned int GetP2SHSigOpCount(const CTransaction& tx, const CCoinsViewCache& inputs)
+unsigned int GetP2SHSigOpCount(const CTransaction& tx, CCoinsView& view)
 {
     if (tx.IsCoinBase())
         return 0;
 
     unsigned int nSigOps = 0;
+    Coin buff;
     for (unsigned int i = 0; i < tx.vin.size(); i++)
     {
-        const CTxOut &prevout = inputs.AccessCoin(tx.vin[i].prevout).out;
+        const CTxOut &prevout = view.AccessCoin(tx.vin[i].prevout, &buff).out;
         if (prevout.scriptPubKey.IsPayToScriptHash())
             nSigOps += prevout.scriptPubKey.GetSigOpCount(tx.vin[i].scriptSig);
     }
@@ -198,19 +199,20 @@ bool CheckTransaction(const CTransaction& tx, CValidationState &state)
 }
 
 namespace Consensus {
-bool CheckTxInputs(const CTransaction& tx, CValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight)
+bool CheckTxInputs(const CTransaction& tx, CValidationState& state, const CCoinsView& inputs, int nSpendHeight)
 {
         // This doesn't trigger the DoS code on purpose; if it did, it would make it easier
         // for an attacker to attempt to split the network.
-        if (!inputs.HaveInputs(tx))
+        if (!HaveInputs(inputs, tx))
             return state.Invalid(error("CheckInputs(): %s inputs unavailable", tx.GetHash().ToString()));
 
         CAmount nValueIn = 0;
         CAmount nFees = 0;
+        Coin buff;
         for (unsigned int i = 0; i < tx.vin.size(); i++)
         {
             const COutPoint &prevout = tx.vin[i].prevout;
-            const Coin& coin = inputs.AccessCoin(prevout);
+            const Coin& coin = inputs.AccessCoin(prevout, &buff);
             assert(!coin.IsSpent());
 
             // If prev is coinbase, check that it's matured

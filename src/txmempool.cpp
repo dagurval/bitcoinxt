@@ -537,11 +537,12 @@ void CTxMemPool::removeForReorg(const CCoinsViewCache *pcoins, unsigned int nMem
             // So it's critical that we remove the tx and not depend on the LockPoints.
             transactionsToRemove.push_back(tx);
         } else if (it->GetSpendsCoinbase()) {
+            Coin buff;
             BOOST_FOREACH(const CTxIn& txin, tx.vin) {
                 indexed_transaction_set::const_iterator it2 = mapTx.find(txin.prevout.hash);
                 if (it2 != mapTx.end())
                     continue;
-                const Coin &coin = pcoins->AccessCoin(txin.prevout);
+                const Coin &coin = pcoins->AccessCoin(txin.prevout, &buff);
                 if (nCheckFrequency != 0) assert(!coin.IsSpent());
                 if (coin.IsSpent() || (coin.IsCoinBase() && ((signed long)nMemPoolHeight) - coin.nHeight < COINBASE_MATURITY)) {
                     transactionsToRemove.push_back(tx);
@@ -711,7 +712,7 @@ void CTxMemPool::check(const CCoinsViewCache *pcoins) const
         const CTxMemPoolEntry* entry = waitingOnDependants.front();
         waitingOnDependants.pop_front();
         CValidationState state;
-        if (!mempoolDuplicate.HaveInputs(entry->GetTx())) {
+        if (!HaveInputs(mempoolDuplicate, entry->GetTx())) {
             waitingOnDependants.push_back(entry);
             stepsSinceLastRemove++;
             assert(stepsSinceLastRemove < waitingOnDependants.size());

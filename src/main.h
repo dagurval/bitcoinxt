@@ -307,7 +307,8 @@ CAmount GetMinRelayFee(const CTransaction& tx, unsigned int nBytes, bool fAllowF
  * This does not modify the UTXO set. If pvChecks is not NULL, script checks are pushed onto it
  * instead of being performed inline.
  */
-bool CheckInputs(const CTransaction& tx, CValidationState &state, const CCoinsViewCache &view, bool fScriptChecks,
+bool CheckInputs(const CTransaction& tx, CValidationState &state,
+                 const CCoinsView& view, bool fScriptChecks,
                  unsigned int flags, bool cacheStore, PrecomputedTransactionData& txdata, std::vector<CScriptCheck> *pvChecks = NULL);
 
 /** Apply the effects of this transaction on the UTXO set represented by view */
@@ -452,7 +453,7 @@ int32_t ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Para
  * While checking, GetBestBlock() refers to the parent block. (protected by cs_main)
  * This is also true for mempool checks.
  */
-int GetSpendHeight(const CCoinsViewCache& inputs);
+int GetSpendHeight(const CCoinsView& inputs);
 
 
 #endif // BITCOIN_MAIN_H

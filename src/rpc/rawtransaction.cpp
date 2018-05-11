@@ -4,6 +4,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "base58.h"
+#include "coinsreadcache.h"
 #include "consensus/validation.h"
 #include "core_io.h"
 #include "dstencode.h"
@@ -642,18 +643,19 @@ UniValue signrawtransaction(const JSONRPCRequest& request)
 
     // Fetch previous transactions (inputs):
     CCoinsView viewDummy;
-    CCoinsViewCache view(&viewDummy);
+    CoinsReadCache cacheview(&viewDummy);
+    CCoinsViewCache view(&cacheview);
     {
         LOCK(mempool.cs);
         CCoinsViewCache &viewChain = *pcoinsTip;
         CCoinsViewMemPool viewMempool(&viewChain, mempool);
-        view.SetBackend(viewMempool); // temporarily switch cache backend to db+mempool view
+        cacheview.SetBackend(viewMempool); // temporarily switch cache backend to db+mempool view
 
         BOOST_FOREACH(const CTxIn& txin, mergedTx.vin) {
-            view.AccessCoin(txin.prevout); // Load entries from viewChain into view; can fail.
+            view.AccessCoin(txin.prevout, nullptr); // Load entries from viewChain into view; can fail.
         }
 
-        view.SetBackend(viewDummy); // switch back to avoid locking mempool for too long
+        cacheview.SetBackend(viewDummy); // switch back to avoid locking mempool for too long
     }
 
     bool fGivenKeys = false;
@@ -706,7 +708,7 @@ UniValue signrawtransaction(const JSONRPCRequest& request)
             CScript scriptPubKey(pkData.begin(), pkData.end());
 
             {
-                const Coin& coin = view.AccessCoin(out);
+                const Coin& coin = view.AccessCoin(out, nullptr);
                 if (!coin.IsSpent() && coin.out.scriptPubKey != scriptPubKey) {
                     std::string err("Previous output scriptPubKey mismatch:\n");
                     err = err + ScriptToAsmStr(coin.out.scriptPubKey) + "\nvs:\n"+
@@ -783,7 +785,7 @@ UniValue signrawtransaction(const JSONRPCRequest& request)
     // Sign what we can:
     for (unsigned int i = 0; i < mergedTx.vin.size(); i++) {
         CTxIn& txin = mergedTx.vin[i];
-        const Coin& coin = view.AccessCoin(txin.prevout);
+        const Coin& coin = view.AccessCoin(txin.prevout, nullptr);
         if (coin.IsSpent()) {
             TxInErrorToJSON(txin, vErrors, "Input not found or already spent");
             continue;
@@ -871,7 +873,7 @@ UniValue sendrawtransaction(const JSONRPCRequest& request)
     CCoinsViewCache &view = *pcoinsTip;
     bool fHaveChain = false;
     for (size_t o = 0; !fHaveChain && o < tx.vout.size(); o++) {
-        const Coin& existingCoin = view.AccessCoin(COutPoint(hashTx, o));
+        const Coin& existingCoin = view.AccessCoin(COutPoint(hashTx, o), nullptr);
         fHaveChain = !existingCoin.IsSpent();
     }
     bool fHaveMempool = mempool.exists(hashTx);

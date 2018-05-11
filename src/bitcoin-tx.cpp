@@ -394,6 +394,7 @@ static void MutateTxSign(CMutableTransaction& tx, const string& flagStr)
     bool fComplete = true;
     CCoinsView viewDummy;
     CCoinsViewCache view(&viewDummy);
+    Coin buff;
 
     if (!registers.count("privatekeys"))
         throw runtime_error("privatekeys register variable must be set.");
@@ -439,7 +440,7 @@ static void MutateTxSign(CMutableTransaction& tx, const string& flagStr)
             CScript scriptPubKey(pkData.begin(), pkData.end());
 
             {
-                const Coin& coin = view.AccessCoin(out);
+                const Coin& coin = view.AccessCoin(out, &buff);
                 if (!coin.IsSpent() && coin.out.scriptPubKey != scriptPubKey) {
                     std::string err("Previous output scriptPubKey mismatch:\n");
                     err = err + ScriptToAsmStr(coin.out.scriptPubKey) + "\nvs:\n"+
@@ -477,7 +478,7 @@ static void MutateTxSign(CMutableTransaction& tx, const string& flagStr)
     // Sign what we can:
     for (unsigned int i = 0; i < mergedTx.vin.size(); i++) {
         CTxIn& txin = mergedTx.vin[i];
-        const Coin& coin = view.AccessCoin(txin.prevout);
+        const Coin& coin = view.AccessCoin(txin.prevout, &buff);
         if (coin.IsSpent()) {
             fComplete = false;
             continue;

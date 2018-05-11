@@ -120,14 +120,15 @@ bool IsStandardTx(const CTransaction& tx, std::string& reason)
     return true;
 }
 
-bool AreInputsStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs)
+bool AreInputsStandard(const CTransaction& tx, const CCoinsView& view)
 {
     if (tx.IsCoinBase())
         return true; // Coinbases don't use vin normally
 
+    Coin buff;
     for (unsigned int i = 0; i < tx.vin.size(); i++)
     {
-        const CTxOut& prev = mapInputs.AccessCoin(tx.vin[i].prevout).out;
+        const CTxOut& prev = view.AccessCoin(tx.vin[i].prevout, &buff).out;
 
         std::vector<std::vector<unsigned char> > vSolutions;
         txnouttype whichType;

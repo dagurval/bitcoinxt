@@ -3,13 +3,13 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "coins.h"
+#include "coinsreadcache.h"
 #include "script/standard.h"
 #include "uint256.h"
 #include "undo.h"
 #include "utilstrencodings.h"
 #include "test/test_bitcoin.h"
 #include "test/test_random.h"
-//#include "validation.h"
 #include "consensus/validation.h"
 
 #include <vector>
@@ -37,7 +37,7 @@ class CCoinsViewTest : public CCoinsView
     std::map<COutPoint, Coin> map_;
 
 public:
-    bool GetCoin(const COutPoint& outpoint, Coin& coin) const
+    bool GetCoin(const COutPoint& outpoint, Coin& coin) const override
     {
         std::map<COutPoint, Coin>::const_iterator it = map_.find(outpoint);
         if (it == map_.end()) {
@@ -51,15 +51,17 @@ public:
         return true;
     }
 
-    bool HaveCoin(const COutPoint& outpoint) const
+    bool HaveCoin(const COutPoint& outpoint) const override
     {
         Coin coin;
-        return GetCoin(outpoint, coin);
+        if (GetCoin(outpoint, coin))
+            return !coin.IsSpent();
+        return false;
     }
 
-    uint256 GetBestBlock() const { return hashBestBlock_; }
+    uint256 GetBestBlock() const override { return hashBestBlock_; }
 
-    bool BatchWrite(CCoinsMap& mapCoins, const uint256& hashBlock)
+    bool BatchWrite(CCoinsMap& mapCoins, const uint256& hashBlock, PreEraseCallb*) override
     {
         for (CCoinsMap::iterator it = mapCoins.begin(); it != mapCoins.end(); ) {
             if (it->second.flags & CCoinsCacheEntry::DIRTY) {
@@ -93,7 +95,7 @@ public:
             ++count;
         }
         BOOST_CHECK_EQUAL(GetCacheSize(), count);
-        BOOST_CHECK_EQUAL(DynamicMemoryUsage(), ret);
+        BOOST_CHECK_EQUAL(LocalCacheUsage(), ret);
     }
 
     CCoinsMap& map() { return cacheCoins; }
@@ -126,7 +128,6 @@ BOOST_AUTO_TEST_CASE(coins_cache_simulation_test)
     bool updated_an_entry = false;
     bool found_an_entry = false;
     bool missed_an_entry = false;
-    bool uncached_an_entry = false;
 
     // A simple map to track what we expect the cache stack to represent.
     std::map<COutPoint, Coin> result;
@@ -148,7 +149,9 @@ BOOST_AUTO_TEST_CASE(coins_cache_simulation_test)
         {
             uint256 txid = txids[insecure_rand() % txids.size()]; // txid we're going to modify in this iteration.
             Coin& coin = result[COutPoint(txid, 0)];
-            const Coin& entry = (insecure_rand() % 500 == 0) ? AccessByTxid(*stack.back(), txid) : stack.back()->AccessCoin(COutPoint(txid, 0));
+            const Coin& entry = (insecure_rand() % 500 == 0)
+                ? AccessByTxid(*stack.back(), txid)
+                : stack.back()->AccessCoin(COutPoint(txid, 0), nullptr);
             BOOST_CHECK(coin == entry);
 
             if (insecure_rand() % 5 == 0 || coin.IsSpent()) {
@@ -172,25 +175,16 @@ BOOST_AUTO_TEST_CASE(coins_cache_simulation_test)
             }
         }
 
-        // One every 10 iterations, remove a random entry from the cache
-        if (insecure_rand() % 10 == 0) {
-            COutPoint out(txids[insecure_rand() % txids.size()], 0);
-            int cacheid = insecure_rand() % stack.size();
-            stack[cacheid]->Uncache(out);
-            uncached_an_entry |= !stack[cacheid]->HaveCoinInCache(out);
-        }
-
         // Once every 1000 iterations and at the end, verify the full cache.
         if (insecure_rand() % 1000 == 1 || i == NUM_SIMULATION_ITERATIONS - 1) {
             for (auto it = result.begin(); it != result.end(); it++) {
                 bool have = stack.back()->HaveCoin(it->first);
-                const Coin& coin = stack.back()->AccessCoin(it->first);
+                const Coin& coin = stack.back()->AccessCoin(it->first, nullptr);
                 BOOST_CHECK(have == !coin.IsSpent());
                 BOOST_CHECK(coin == it->second);
                 if (coin.IsSpent()) {
                     missed_an_entry = true;
                 } else {
-                    BOOST_CHECK(stack.back()->HaveCoinInCache(it->first));
                     found_an_entry = true;
                 }
             }
@@ -245,7 +239,6 @@ BOOST_AUTO_TEST_CASE(coins_cache_simulation_test)
     BOOST_CHECK(updated_an_entry);
     BOOST_CHECK(found_an_entry);
     BOOST_CHECK(missed_an_entry);
-    BOOST_CHECK(uncached_an_entry);
 }
 
 // Store of all necessary tx and undo data for next test
@@ -415,7 +408,7 @@ BOOST_AUTO_TEST_CASE(updatecoins_simulation_test)
         if (insecure_rand() % 1000 == 1 || i == NUM_SIMULATION_ITERATIONS - 1) {
             for (auto it = result.begin(); it != result.end(); it++) {
                 bool have = stack.back()->HaveCoin(it->first);
-                const Coin& coin = stack.back()->AccessCoin(it->first);
+                const Coin& coin = stack.back()->AccessCoin(it->first, nullptr);
                 BOOST_CHECK(have == !coin.IsSpent());
                 BOOST_CHECK(coin == it->second);
             }
@@ -581,7 +574,7 @@ void WriteCoinsViewEntry(CCoinsView& view, CAmount value, char flags)
 {
     CCoinsMap map;
     InsertCoinsMapEntry(map, value, flags);
-    view.BatchWrite(map, {});
+    view.BatchWrite(map, {}, nullptr);
 }
 
 class SingleEntryCacheTest
@@ -601,7 +594,7 @@ public:
 void CheckAccessCoin(CAmount base_value, CAmount cache_value, CAmount expected_value, char cache_flags, char expected_flags)
 {
     SingleEntryCacheTest test(base_value, cache_value, cache_flags);
-    test.cache.AccessCoin(OUTPOINT);
+    test.cache.AccessCoin(OUTPOINT, nullptr);
     test.cache.SelfTest();
 
     CAmount result_value;
@@ -629,7 +622,7 @@ BOOST_AUTO_TEST_CASE(ccoins_access)
     CheckAccessCoin(ABSENT, VALUE2, VALUE2, FRESH      , FRESH      );
     CheckAccessCoin(ABSENT, VALUE2, VALUE2, DIRTY      , DIRTY      );
     CheckAccessCoin(ABSENT, VALUE2, VALUE2, DIRTY|FRESH, DIRTY|FRESH);
-    CheckAccessCoin(PRUNED, ABSENT, PRUNED, NO_ENTRY   , FRESH      );
+    CheckAccessCoin(PRUNED, ABSENT, ABSENT, NO_ENTRY   , NO_ENTRY   );
     CheckAccessCoin(PRUNED, PRUNED, PRUNED, 0          , 0          );
     CheckAccessCoin(PRUNED, PRUNED, PRUNED, FRESH      , FRESH      );
     CheckAccessCoin(PRUNED, PRUNED, PRUNED, DIRTY      , DIRTY      );
@@ -638,7 +631,7 @@ BOOST_AUTO_TEST_CASE(ccoins_access)
     CheckAccessCoin(PRUNED, VALUE2, VALUE2, FRESH      , FRESH      );
     CheckAccessCoin(PRUNED, VALUE2, VALUE2, DIRTY      , DIRTY      );
     CheckAccessCoin(PRUNED, VALUE2, VALUE2, DIRTY|FRESH, DIRTY|FRESH);
-    CheckAccessCoin(VALUE1, ABSENT, VALUE1, NO_ENTRY   , 0          );
+    CheckAccessCoin(VALUE1, ABSENT, ABSENT, NO_ENTRY   , NO_ENTRY   );
     CheckAccessCoin(VALUE1, PRUNED, PRUNED, 0          , 0          );
     CheckAccessCoin(VALUE1, PRUNED, PRUNED, FRESH      , FRESH      );
     CheckAccessCoin(VALUE1, PRUNED, PRUNED, DIRTY      , DIRTY      );

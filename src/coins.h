@@ -121,6 +121,9 @@ struct CCoinsCacheEntry
 
 typedef std::unordered_map<COutPoint, CCoinsCacheEntry, SaltedOutpointHasher> CCoinsMap;
 
+// Function to call after batch writing a cached entry, but before erasing it.
+using PreEraseCallb = std::function<void(const CCoinsMap::const_iterator&)>;
+
 /** Cursor for iterating over CoinsView state */
 class CCoinsViewCursor
 {
@@ -157,7 +160,20 @@ public:
 
     //! Do a bulk modification (multiple Coin changes + BestBlock change).
     //! The passed mapCoins can be modified.
-    virtual bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
+    virtual bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, PreEraseCallb*);
+
+    /**
+     * Return a reference to Coin in the cache, or a pruned one if not found. This is
+     * more efficient than GetCoin.
+     *
+     * Optional buffer for the ownership of coin when accessing a view that does not hold
+     * cached values. Throws if nullptr.
+     *
+     * Generally, do not hold the reference returned for more than a short scope.
+     * To be safe, best to not hold the returned reference through any other
+     * calls to the view.
+     */
+    virtual const Coin& AccessCoin(const COutPoint &outpoint, Coin* buffer) const;
 
     //! Get a cursor to iterate over the whole state
     virtual CCoinsViewCursor *Cursor() const;
@@ -167,6 +183,15 @@ public:
 
     //! Estimate database size (0 if not implemented)
     virtual size_t EstimateSize() const { return 0; }
+
+    //! Calculate the size of the cache (in bytes) - if applicable.
+    virtual size_t GetCacheUsage() const { return 0; }
+
+    //! Attempt to trim cache to target (in bytes) - if applicable. Returns cache size after trim.
+    virtual size_t TrimCache(size_t target) { return 0; }
+
+    //! Remove the UTXO with the given outpoint from the cache, if applicable and unmodified.
+    virtual void Uncache(const COutPoint&) { }
 };
 
 
@@ -182,11 +207,14 @@ public:
     bool HaveCoin(const COutPoint &outpoint) const override;
     uint256 GetBestBlock() const override;
     void SetBackend(CCoinsView &viewIn);
-    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) override;
+    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, PreEraseCallb*) override;
+    const Coin& AccessCoin(const COutPoint &outpoint, Coin* buffer) const override;
     CCoinsViewCursor *Cursor() const override;
     size_t EstimateSize() const override;
+    size_t GetCacheUsage() const override;
+    size_t TrimCache(size_t target) override;
+    void Uncache(const COutPoint&) override;
 };
-
 
 /** CCoinsView that adds a memory cache for transactions to another CCoinsView */
 class CCoinsViewCache : public CCoinsViewBacked
@@ -201,16 +229,19 @@ protected:
 
     /* Cached dynamic memory usage for the inner Coin objects. */
     mutable size_t cachedCoinsUsage;
+    size_t LocalCacheUsage() const;
 
 public:
     CCoinsViewCache(CCoinsView *baseIn);
 
     // Standard CCoinsView methods
     bool GetCoin(const COutPoint &outpoint, Coin &coin) const;
-    bool HaveCoin(const COutPoint &outpoint) const;
+    bool HaveCoin(const COutPoint &outpoint) const override;
     uint256 GetBestBlock() const;
     void SetBestBlock(const uint256 &hashBlock);
-    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
+    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, PreEraseCallb*) override;
+    const Coin& AccessCoin(const COutPoint &outpoint, Coin* buffer) const override;
+
 
     /**
      * Check if we have the given utxo already loaded in this cache.
@@ -218,13 +249,6 @@ public:
      * the backing CCoinsView are made.
      */
     bool HaveCoinInCache(const COutPoint &outpoint) const;
-
-    /**
-     * Return a reference to Coin in the cache, or a pruned one if not found. This is
-     * more efficient than GetCoin. Modifications to other cache entries are
-     * allowed while accessing the returned pointer.
-     */
-    const Coin& AccessCoin(const COutPoint &output) const;
 
     /**
      * Add a coin. Set potential_overwrite to true if a non-pruned version may
@@ -246,36 +270,16 @@ public:
      */
     bool Flush();
 
-    /**
-     * Removes the UTXO with the given outpoint from the cache, if it is
-     * not modified.
-     */
-    void Uncache(const COutPoint &outpoint);
+    void Uncache(const COutPoint &outpoint) override;
 
     //! Calculate the size of the cache (in number of transaction outputs)
     unsigned int GetCacheSize() const;
 
-    //! Calculate the size of the cache (in bytes)
-    size_t DynamicMemoryUsage() const;
-
-    /**
-     * Amount of bitcoins coming in to a transaction
-     * Note that lightweight clients may not know anything besides the hash of previous transactions,
-     * so may not be able to calculate this.
-     *
-     * @param[in] tx	transaction for which we are checking input total
-     * @return	Sum of value of all inputs (scriptSigs)
-     */
-    CAmount GetValueIn(const CTransaction& tx) const;
-
-    //! Check whether all prevouts of the transaction are present in the UTXO set represented by this view
-    bool HaveInputs(const CTransaction& tx) const;
-
-    //! Return priority of tx at height nHeight
-    double GetPriority(const CTransaction &tx, uint32_t nHeight) const;
+    size_t GetCacheUsage() const override;
+    size_t TrimCache(size_t target) override;
 
 private:
-    CCoinsMap::iterator FetchCoin(const COutPoint &outpoint) const;
+    bool FetchCoin(const COutPoint &outpoint, Coin& coin, CCoinsMap::iterator* cacheEntry) const;
 
     /**
      * By making the copy constructor private, we prevent accidentally using it when one intends to create a cache on top of a base cache.
@@ -290,6 +294,19 @@ private:
 void AddCoins(CCoinsViewCache& cache, const CTransaction& tx, int nHeight);
 
 //! Utility function to find any unspent output with a given txid.
-const Coin& AccessByTxid(const CCoinsViewCache& cache, const uint256& txid);
+const Coin AccessByTxid(const CCoinsView& cache, const uint256& txid);
 
+/**
+ * Amount of bitcoins coming in to a transaction
+ * Note that lightweight clients may not know anything besides the hash of previous transactions,
+ * so may not be able to calculate this.
+ *
+ * @param[in] tx	transaction for which we are checking input total
+ * @return	Sum of value of all inputs (scriptSigs)
+ */
+CAmount GetValueIn(const CCoinsView&, const CTransaction& tx);
+//! Check whether all prevouts of the transaction are present in the UTXO set represented by this view
+bool HaveInputs(const CCoinsView&, const CTransaction& tx);
+//! Return priority of tx at height nHeight
+double GetPriority(const CCoinsView&, const CTransaction &tx, uint32_t nHeight);
 #endif // BITCOIN_COINS_H
