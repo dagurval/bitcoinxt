@@ -137,6 +137,7 @@ BITCOIN_CORE_H = \
   options.h \
   policy/fees.h \
   policy/policy.h \
+  policy/txpriority.h \
   pow.h \
   process_xthinblock.h \
   protocol.h \
@@ -235,6 +236,7 @@ libbitcoin_server_a_SOURCES = \
   options.cpp \
   policy/fees.cpp \
   policy/policy.cpp \
+  policy/txpriority.cpp \
   pow.cpp \
   process_xthinblock.cpp \
   rest.cpp \
