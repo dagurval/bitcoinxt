@@ -197,6 +197,15 @@ public:
 
 struct CMutableTransaction;
 
+// Transaction ID is currently the same as the transaction hash, but these may
+// differ in the future when transaction malleability is fixed, depending on
+// how malleability is fixed.
+//
+// Most of the code base today assumes TxID == TxHash, but new code should
+// differentiate to ease transition later.
+using TxID = uint256;
+using TxHash = uint256;
+
 /** The basic transaction that is broadcasted on the network and contained in
  * blocks.  A transaction can contain multiple inputs and outputs.
  */
@@ -204,7 +213,7 @@ class CTransaction
 {
 private:
     /** Memory only. */
-    const uint256 hash;
+    const TxHash hash;
     void UpdateHash() const;
 
 public:
@@ -251,8 +260,12 @@ public:
         return vin.empty() && vout.empty();
     }
 
-    const uint256& GetHash() const {
+    const TxHash& GetHash() const {
         return hash;
+    }
+
+    const TxID& GetTxID() const {
+        return GetHash();
     }
 
     // True if only scriptSigs are different
