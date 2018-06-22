@@ -49,7 +49,7 @@ class FullBlockTest(ComparisonTestFramework):
         self.blocks = {}
 
     def setup_network(self):
-        self.extra_args = [['-norelaypriority']]
+        self.extra_args = [['-allowfreetx=0']]
         self.nodes = start_nodes(self.num_nodes, self.options.tmpdir,
                                  self.extra_args,
                                  binary=[self.options.testbinary])

@@ -92,7 +92,7 @@ class FullBlockTest(ComparisonTestFramework):
     def setup_network(self):
         if not XT_TWEAKS:
             self.extra_args = [['-debug',
-                            '-norelaypriority',
+                            '-allowfreetx=0',
                             '-whitelist=127.0.0.1',
                             '-limitancestorcount=9999',
                             '-limitancestorsize=9999',
@@ -104,7 +104,7 @@ class FullBlockTest(ComparisonTestFramework):
                             "-thirdhftime=%d" % MONOLITH_START_TIME]]
         else:
             self.extra_args = [['-debug',
-                            '-relaypriority=0',
+                            '-allowfreetx=0',
                             '-whitelist=127.0.0.1',
                             '-limitancestorcount=9999',
                             '-limitancestorsize=9999',
