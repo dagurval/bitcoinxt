@@ -126,6 +126,7 @@ testScripts = [
     'bip64.py',
     'p2p-leaktests.py',
     'abc-transaction-ordering.py',
+    'abc-checkdatasig-activation.py',
 ]
 
 testScriptsExt = [
