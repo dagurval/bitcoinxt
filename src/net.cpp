@@ -2023,7 +2023,7 @@ void CConnman::GetNodeStats(std::vector<CNodeStats>& vstats)
     }
 }
 
-void CConnman::RelayTransaction(const CTransaction& tx, const CDataStream& ss, std::vector<uint256>& vAncestors)
+void CConnman::RelayTransaction(const CTransaction& tx, const CDataStream& ss, std::vector<uint256>& vAncestors, const bool fRespend)
 {
     CInv inv(MSG_TX, tx.GetHash());
     {
@@ -2045,9 +2045,9 @@ void CConnman::RelayTransaction(const CTransaction& tx, const CDataStream& ss, s
         if(!pnode->fRelayTxes)
             continue;
         LOCK(pnode->cs_filter);
-        if (pnode->pfilter)
+        if (pnode->pfilter && !pnode->pfilter->IsFull())
         {
-            if (pnode->pfilter->IsRelevantAndUpdate(tx)) {
+            if (!fRespend && pnode->pfilter->IsRelevantAndUpdate(tx)) {
                 BOOST_FOREACH(uint256& hashFound, vAncestors) {
                     if (hashFound != tx.GetHash() && pnode->pfilter->WantsAncestors())
                         pnode->pfilter->insert(hashFound);
@@ -2071,12 +2071,12 @@ bool FindTransactionInRelayMap(uint256 hash, CTransaction &out) {
     return false;
 }
 
-void CConnman::RelayTransaction(const CTransaction& tx, std::vector<uint256>& vAncestors)
+void CConnman::RelayTransaction(const CTransaction& tx, std::vector<uint256>& vAncestors, const bool fRespend)
 {
     CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
     ss.reserve(10000);
     ss << tx;
-    RelayTransaction(tx, ss, vAncestors);
+    RelayTransaction(tx, ss, vAncestors, fRespend);
 }
 
 

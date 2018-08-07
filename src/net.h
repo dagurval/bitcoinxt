@@ -182,8 +182,8 @@ public:
         post();
     };
 
-    void RelayTransaction(const CTransaction& tx, std::vector<uint256>& vAncestors);
-    void RelayTransaction(const CTransaction& tx, const CDataStream& ss, std::vector<uint256>& vAncestors);
+    void RelayTransaction(const CTransaction& tx, std::vector<uint256>& vAncestors, const bool fRespend = false);
+    void RelayTransaction(const CTransaction& tx, const CDataStream& ss, std::vector<uint256>& vAncestors, const bool fRespend = false);
 
     // Addrman functions
     size_t GetAddressCount() const;
