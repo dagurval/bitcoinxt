@@ -706,6 +706,9 @@ public:
 
     bool SupportsXThinBlocks() const;
     bool SupportsCompactBlocks() const;
+
+    // Best effort determination if node is an SPV client.
+    bool IsSPVClient() const;
 };
 
 

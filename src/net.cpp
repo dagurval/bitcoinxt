@@ -2044,10 +2044,15 @@ void CConnman::RelayTransaction(const CTransaction& tx, const CDataStream& ss, s
     {
         if(!pnode->fRelayTxes)
             continue;
+        if (fRespend && pnode->IsSPVClient()) {
+            // Don't relay respends to SPV clients. They may not track the
+            // original transaction and thus don't know it's a respend.
+            continue;
+        }
         LOCK(pnode->cs_filter);
-        if (pnode->pfilter && !pnode->pfilter->IsFull())
+        if (pnode->pfilter)
         {
-            if (!fRespend && pnode->pfilter->IsRelevantAndUpdate(tx)) {
+            if (pnode->pfilter->IsRelevantAndUpdate(tx)) {
                 BOOST_FOREACH(uint256& hashFound, vAncestors) {
                     if (hashFound != tx.GetHash() && pnode->pfilter->WantsAncestors())
                         pnode->pfilter->insert(hashFound);
@@ -2055,8 +2060,10 @@ void CConnman::RelayTransaction(const CTransaction& tx, const CDataStream& ss, s
                         pnode->PushInventory(CInv(MSG_TX, hashFound));
                 }
             }
-        } else
+        }
+        else {
             pnode->PushInventory(inv);
+        }
     }
 }
 
@@ -2290,6 +2297,12 @@ bool CNode::SupportsXThinBlocks() const {
 
 bool CNode::SupportsCompactBlocks() const {
     return nVersion >= SHORT_IDS_BLOCKS_VERSION;
+}
+
+bool CNode::IsSPVClient() const {
+    // We assume node is an SPV node if it has sent us a bloom filter. "IsFull"
+    // returns true for nodes that have not sent a filter (default constructed).
+    return bool(pfilter) && !pfilter->IsFull();
 }
 
 int64_t PoissonNextSend(int64_t nNow, int average_interval_seconds) {
