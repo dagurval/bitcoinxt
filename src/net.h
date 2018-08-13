@@ -544,7 +544,7 @@ public:
     bool fSentAddr;
     CSemaphoreGrant grantOutbound;
     CCriticalSection cs_filter, cs_xfilter;
-    CBloomFilter* pfilter;
+    std::unique_ptr<CBloomFilter> pfilter;
     std::unique_ptr<CBloomFilter> xthinFilter;
     int nRefCount;
     const NodeId id;

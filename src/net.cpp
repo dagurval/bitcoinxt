@@ -2162,7 +2162,7 @@ CNode::CNode(NodeId idIn, uint64_t nLocalServicesIn, int nMyStartingHeightIn, SO
     nNextInvSend = 0;
     fRelayTxes = false;
     fSentAddr = false;
-    pfilter = new CBloomFilter();
+    pfilter.reset(new CBloomFilter);
     xthinFilter.reset(new CBloomFilter());
     nPingNonceSent = 0;
     nPingUsecStart = 0;
@@ -2184,9 +2184,6 @@ CNode::CNode(NodeId idIn, uint64_t nLocalServicesIn, int nMyStartingHeightIn, SO
 CNode::~CNode()
 {
     CloseSocket(hSocket);
-
-    if (pfilter)
-        delete pfilter;
 }
 
 void CNode::AskFor(const CInv& inv)
