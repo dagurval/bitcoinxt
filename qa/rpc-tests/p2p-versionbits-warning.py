@@ -16,17 +16,12 @@ Generate chains with block versions that appear to be signalling unknown
 forks, and test that warning alerts are generated.
 """
 
-# bip135 begin
-# modified from 108/144 to 51/100 for new unknown versions algo
 VB_PERIOD = 100 # unknown versionbits period length
 VB_THRESHOLD = 51 # unknown versionbits warning level
 WARN_UNKNOWN_RULES_MINED = "Unknown block versions being mined! It's possible unknown rules are in effect"
 # the warning echo'd by alertnotify is sanitized
 WARN_UNKNOWN_RULES_MINED_SANITIZED = re.compile("^Warning: Unknown block versions being mined Its possible unknown rules are in effect")
-# After BIP135, a client cannot know whether an unknown version bit has gone ACTIVE
-# since the activation threshold of unknown bits is ... unknown.
 VB_PATTERN = re.compile("^Warning.*versionbit")
-# bip135 end
 VB_TOP_BITS = 0x20000000
 VB_UNKNOWN_BIT = 26 # Choose a bit unassigned to any deployment
 
@@ -129,9 +124,7 @@ class VersionBitsWarningTest(BitcoinTestFramework):
         # 2. Now build one period of blocks on the tip, with < VB_THRESHOLD
         # blocks signaling some unknown bit.
         nVersion = VB_TOP_BITS | (1<<VB_UNKNOWN_BIT)
-        for i in range(VB_THRESHOLD - 1):
-            self.send_blocks_with_version(test_node, 1, nVersion)
-            test_node.sync_with_ping()
+        self.send_blocks_with_version(test_node, VB_THRESHOLD - 1, nVersion)
         assert(self.nodes[0].getblockcount() ==  VB_PERIOD + VB_THRESHOLD - 1)
 
         # Fill rest of period with regular version blocks
@@ -145,9 +138,7 @@ class VersionBitsWarningTest(BitcoinTestFramework):
 
         # 3. Now build one period of blocks with > VB_THRESHOLD blocks signaling
         # some unknown bit
-        for i in range(VB_THRESHOLD):
-            self.send_blocks_with_version(test_node, 1, nVersion)
-            test_node.sync_with_ping()
+        self.send_blocks_with_version(test_node, VB_THRESHOLD, nVersion)
         assert(self.nodes[0].getblockcount() ==  VB_PERIOD * 2 + VB_THRESHOLD)
         self.nodes[0].generate(VB_PERIOD - VB_THRESHOLD)
         # Might not get a versionbits-related alert yet, as we should
@@ -164,16 +155,12 @@ class VersionBitsWarningTest(BitcoinTestFramework):
 
         # Mine a period worth of expected blocks so the generic block-version warning
         # is cleared, and restart the node.
-        # OBSOLETE: This should no longer move the versionbit state to ACTIVE.
-        # State transitions are NOT tracked for unconfigured bits in bip135,
-        # since we do not have sufficient information to assess those reliably.
         self.nodes[0].generate(VB_PERIOD)
         stop_nodes(self.nodes)
         # Empty out the alert file
-        with open(self.alert_filename, 'w', encoding='utf8') as f:
+        with open(self.alert_filename, 'w', encoding='utf8') as _:
             pass
-        self.nodes[0] = start_node(0, self.options.tmpdir, ["-debug", "-logtimemicros=1",
-                                   "-alertnotify=echo %s >> \"" + self.alert_filename + "\""])
+        self.nodes[0] = start_node(0, self.options.tmpdir, self.node_options)
 
         # Since there are no unknown versionbits exceeding threshold in last period,
         # no error will be generated.
