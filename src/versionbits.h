@@ -34,6 +34,12 @@ enum ThresholdState
 // will either be NULL or a block with (height + 1) % Period() == 0.
 typedef std::map<const CBlockIndex*, ThresholdState> ThresholdConditionCache;
 
+/**
+ * Returns true if a deployment is configured on given network.
+ * This requires at minimum that the bit has a name, threshold and window size.
+ */
+bool IsConfiguredDeployment(const Consensus::Params &consensusParams, const int bit);
+
 struct ForkDeploymentInfo
 {
     /** Deployment name */
@@ -41,8 +47,6 @@ struct ForkDeploymentInfo
     /** Whether GBT clients can safely ignore this rule in simplified usage */
     bool gbt_force;
 };
-
-extern const struct ForkDeploymentInfo VersionBitsDeploymentInfo[];
 
 /**
  * Abstract class that implements BIP135-style threshold logic, and caches results.

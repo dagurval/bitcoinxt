@@ -347,7 +347,6 @@ libbitcoin_common_a_SOURCES = \
   base58.cpp \
   cashaddr.cpp \
   cashaddrenc.cpp \
-  chain.cpp \
   chainparams.cpp \
   coins.cpp \
   compressor.cpp \
@@ -363,7 +362,6 @@ libbitcoin_common_a_SOURCES = \
   scheduler.cpp \
   script/sign.cpp \
   script/standard.cpp \
-  versionbits.cpp \
   utxocommit.cpp \
   $(BITCOIN_CORE_H)
 

@@ -127,6 +127,18 @@ const struct ForkDeploymentInfo VersionBitsDeploymentInfo[Consensus::MAX_VERSION
     }};
 // bip135 end
 
+bool IsConfiguredDeployment(const Consensus::Params &consensusParams, const int bit)
+{
+    if (std::string(VersionBitsDeploymentInfo[bit].name).empty()) {
+        return false;
+    }
+
+    const Consensus::ForkDeployment& d = consensusParams.vDeployments[bit];
+    if (d.windowsize == 0 || d.threshold == 0) {
+        return false;
+    }
+    return true;
+}
 
 // bip135 begin
 bool AbstractThresholdConditionChecker::backAtDefined(ThresholdConditionCache &cache, const CBlockIndex *pindex) const

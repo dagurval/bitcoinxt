@@ -411,28 +411,3 @@ void SelectParams(const std::string& network)
     SelectBaseParams(network);
     pCurrentParams = &Params(network);
 }
-
-// bip135 begin
-/**
- * Return true if a deployment is considered to be configured for the network.
- * Deployments with a zero-length name, or a windowsize or threshold equal to
- * zero are not considered to be configured, and will be reported as 'unknown'
- * if signals are detected for them.
- * Unconfigured deployments can be ignored to save processing time, e.g.
- * in ComputeBlockVersion() when computing the default block version to emit.
- */
-bool IsConfiguredDeployment(const Consensus::Params &consensusParams, const int bit)
-{
-    const Consensus::ForkDeployment *vdeployments = consensusParams.vDeployments;
-    const struct ForkDeploymentInfo &vbinfo = VersionBitsDeploymentInfo[bit];
-
-    if (strlen(vbinfo.name) == 0)
-        return false;
-
-    if (vdeployments[bit].windowsize == 0 || vdeployments[bit].threshold == 0)
-    {
-        return false;
-    }
-    return true;
-}
-// bip135 end
