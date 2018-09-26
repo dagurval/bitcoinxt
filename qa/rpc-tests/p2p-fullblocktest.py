@@ -159,6 +159,7 @@ class FullBlockTest(ComparisonTestFramework):
             block = create_block(base_block_hash, coinbase, block_time)
         else:
             coinbase.vout[0].nValue += spend.tx.vout[spend.n].nValue - 1 # all but one satoshi to fees
+            assert(coinbase.vout[0].nValue >= 0)
             coinbase.rehash()
             block = create_block(base_block_hash, coinbase, block_time)
             tx = create_transaction(spend.tx, spend.n, b"", 1, script)  # spend 1 satoshi
@@ -585,16 +586,18 @@ class FullBlockTest(ComparisonTestFramework):
         # Until block is full, add tx's with 1 satoshi to p2sh_script, the rest to OP_TRUE
         tx_new = None
         tx_last = tx
+        tx_last_n = len(tx.vout) - 1
         total_size=len(b39.serialize())
         while(total_size < MAX_BLOCK_SIZE):
-            tx_new = create_tx(tx_last, 1, 1, p2sh_script)
-            tx_new.vout.append(CTxOut(tx_last.vout[1].nValue - 1, CScript([OP_TRUE])))
+            tx_new = create_tx(tx_last, tx_last_n, 1, p2sh_script)
+            tx_new.vout.append(CTxOut(tx_last.vout[tx_last_n].nValue - 1, CScript([OP_TRUE])))
             tx_new.rehash()
             total_size += len(tx_new.serialize())
             if total_size >= MAX_BLOCK_SIZE:
                 break
             b39.vtx.append(tx_new) # add tx to block
             tx_last = tx_new
+            tx_last_n = len(tx_new.vout) - 1
             b39_outputs += 1
 
         b39 = update_block(39, [])
@@ -631,6 +634,7 @@ class FullBlockTest(ComparisonTestFramework):
             scriptSig = CScript([sig, redeem_script])
 
             tx.vin[1].scriptSig = scriptSig
+            bloat_tx(tx)
             tx.rehash()
             new_txs.append(tx)
             lastOutpoint = COutPoint(tx.sha256, 0)
@@ -639,6 +643,7 @@ class FullBlockTest(ComparisonTestFramework):
         tx = CTransaction()
         tx.vin.append(CTxIn(lastOutpoint, b''))
         tx.vout.append(CTxOut(1, CScript([OP_CHECKSIG] * b40_sigops_to_fill)))
+        bloat_tx(tx)
         tx.rehash()
         new_txs.append(tx)
         update_block(40, new_txs)
@@ -654,6 +659,7 @@ class FullBlockTest(ComparisonTestFramework):
         tx = CTransaction()
         tx.vin.append(CTxIn(lastOutpoint, b''))
         tx.vout.append(CTxOut(1, CScript([OP_CHECKSIG] * b41_sigops_to_fill)))
+        bloat_tx(tx)
         tx.rehash()
         update_block(41, [tx])
         yield accepted()
@@ -883,6 +889,7 @@ class FullBlockTest(ComparisonTestFramework):
         assert(len(out[17].tx.vout) < 42)
         tx.vin.append(CTxIn(COutPoint(out[17].tx.sha256, 42), CScript([OP_TRUE]), 0xffffffff))
         tx.vout.append(CTxOut(0, b""))
+        bloat_tx(tx)
         tx.calc_sha256()
         b58 = update_block(58, [tx])
         yield rejected(RejectResult(16, b'bad-txns-inputs-missingorspent'))
@@ -1070,6 +1077,7 @@ class FullBlockTest(ComparisonTestFramework):
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(bogus_tx.sha256, 0), b"", 0xffffffff))
         tx.vout.append(CTxOut(1, b""))
+        bloat_tx(tx)
         update_block(70, [tx])
         yield rejected(RejectResult(16, b'bad-txns-inputs-missingorspent'))
 
@@ -1272,6 +1280,7 @@ class FullBlockTest(ComparisonTestFramework):
         #
         b84 = block(84)
         tx1 = create_tx(out[29].tx, out[29].n, 0, CScript([OP_RETURN]))
+        vout_offset = len(tx1.vout)
         tx1.vout.append(CTxOut(0, CScript([OP_TRUE])))
         tx1.vout.append(CTxOut(0, CScript([OP_TRUE])))
         tx1.vout.append(CTxOut(0, CScript([OP_TRUE])))
@@ -1279,13 +1288,13 @@ class FullBlockTest(ComparisonTestFramework):
         tx1.calc_sha256()
         self.sign_tx(tx1, out[29].tx, out[29].n)
         tx1.rehash()
-        tx2 = create_tx(tx1, 1, 0, CScript([OP_RETURN]))
+        tx2 = create_tx(tx1, vout_offset, 0, CScript([OP_RETURN]))
         tx2.vout.append(CTxOut(0, CScript([OP_RETURN])))
-        tx3 = create_tx(tx1, 2, 0, CScript([OP_RETURN]))
+        tx3 = create_tx(tx1, vout_offset + 1, 0, CScript([OP_RETURN]))
         tx3.vout.append(CTxOut(0, CScript([OP_TRUE])))
-        tx4 = create_tx(tx1, 3, 0, CScript([OP_TRUE]))
+        tx4 = create_tx(tx1, vout_offset + 2, 0, CScript([OP_TRUE]))
         tx4.vout.append(CTxOut(0, CScript([OP_RETURN])))
-        tx5 = create_tx(tx1, 4, 0, CScript([OP_RETURN]))
+        tx5 = create_tx(tx1, vout_offset + 3, 0, CScript([OP_RETURN]))
 
         update_block(84, [tx1,tx2,tx3,tx4,tx5])
         yield accepted()
