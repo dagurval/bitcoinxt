@@ -1,6 +1,10 @@
 import time
-from test_framework.mininode import CTxOut
+from test_framework.mininode import CTxOut, CTransaction, FromHex, ToHex
 from test_framework.script import CScript, OP_RETURN
+from test_framework.cdefs import MIN_TX_SIZE, MAX_TXOUT_PUBKEY_SCRIPT
+
+import random
+from binascii import hexlify, unhexlify
 
 def grind_nsequence(tx):
     MAX_ALLOWED_NSEQUENCE = 0xffffffff-1
@@ -16,3 +20,31 @@ def tx_grind_hash(tx, criteria, grinder = grind_nsequence):
     while (not criteria(tx.hash)):
         grinder(tx)
         tx.rehash()
+
+# Append junk outputs until it reaches at least min_size
+def bloat_tx(tx, min_size = None):
+    if min_size is None:
+        min_size = MIN_TX_SIZE
+
+    curr_size = len(tx.serialize())
+
+    while curr_size < min_size:
+        # txout.value + txout.pk_script bytes + op_return
+        extra_bytes = 8 + 1 + 1
+        junk = max(0, min_size - curr_size - extra_bytes)
+        junk = min(junk, MAX_TXOUT_PUBKEY_SCRIPT)
+        if junk == 0:
+            tx.vout.append(CTxOut(0, CScript([OP_RETURN])))
+        else:
+            tx.vout.append(CTxOut(0, CScript([random.getrandbits(8 * junk), OP_RETURN])))
+        curr_size = len(tx.serialize())
+
+    tx.rehash()
+
+# Append junk outputs until it reaches at least min_size
+def bloat_raw_tx(rawtx_hex, min_size = None):
+
+    tx = CTransaction()
+    FromHex(tx, rawtx_hex)
+    bloat_tx(tx, min_size)
+    return ToHex(tx)
