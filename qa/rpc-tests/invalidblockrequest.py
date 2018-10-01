@@ -81,9 +81,9 @@ class InvalidBlockRequestTest(ComparisonTestFramework):
         block2 = create_block(self.tip, create_coinbase(absoluteHeight = height), self.block_time)
         self.block_time += 1
 
-        # b'0x51' is OP_TRUE
-        tx1 = create_transaction(self.block1.vtx[0], 0, b'\x51', 50 * COIN)
-        tx2 = create_transaction(tx1, 0, b'\x51', 50 * COIN)
+        tx1 = create_transaction(self.block1.vtx[0], 0, b'', 50 * COIN,
+                scriptPubKey = CScript([OP_TRUE]))
+        tx2 = create_transaction(tx1, 0, b'', 50 * COIN)
 
         # We want tx1 to come before tx2 in the block, after LTOR activation we need to grind the hash.
         tx_grind_hash(tx2, lambda h: h > tx1.hash)
