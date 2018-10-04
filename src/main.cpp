@@ -44,6 +44,7 @@
 #include "ui_interface.h"
 #include "undo.h"
 #include "util.h"
+#include "utilblock.h"
 #include "utilfork.h"
 #include "utilmoneystr.h"
 #include "utilprocessmsg.h"
@@ -862,8 +863,9 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
 
     // is it already in the memory pool?
     uint256 hash = tx.GetHash();
-    if (pool.exists(hash))
+    if (pool.exists(hash)) {
         return false;
+    }
 
     // Check for conflicts with in-memory transactions and triggers actions at
     // end of scope (relay tx, sync wallet, etc)
@@ -959,7 +961,7 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
                              ::minRelayTxFee);
         FeeEvaluator::FeeState feestate = feeEval.HasSufficientFee(view, entry,
                                                                    chainActive.Height());
-        if (!fLimitFree) {
+        if (fLimitFree) {
             // Don't accept it if it can't get into a block
             bool ok = feestate == FeeEvaluator::FEE_OK
                 || feestate == FeeEvaluator::ABSURD_HIGH_FEE;
@@ -1021,8 +1023,9 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
         }
 
         respend.SetValid(true);
-        if (respend.IsRespend())
+        if (respend.IsRespend()) {
             return false;
+        }
 
         // Set a fee delta to protect local wallet transactions from mempool size-based eviction
         if (!fLimitFree) {
@@ -2296,7 +2299,7 @@ bool static DisconnectTip(CValidationState &state) {
         return false;
     // Resurrect mempool transactions from the disconnected block.
     std::vector<uint256> vHashUpdate;
-    BOOST_FOREACH(const CTransaction &tx, block.vtx) {
+    for (const CTransaction &tx : SortByParentsFirst(begin(block.vtx), end(block.vtx))) {
         // ignore validation errors in resurrected transactions
         list<CTransaction> removed;
         CValidationState stateDummy;

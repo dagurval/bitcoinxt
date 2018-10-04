@@ -181,6 +181,7 @@ BITCOIN_CORE_H = \
   ui_interface.h \
   undo.h \
   util.h \
+  utilblock.h \
   utildebug.h \
   utilfork.h \
   utilhash.h \
@@ -267,6 +268,7 @@ libbitcoin_server_a_SOURCES = \
   timedata.cpp \
   txdb.cpp \
   txmempool.cpp \
+  utilblock.cpp \
   utildebug.cpp \
   utilfork.cpp \
   utilhash.cpp \
