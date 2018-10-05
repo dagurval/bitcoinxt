@@ -6,7 +6,7 @@
 from test_framework.test_framework import ComparisonTestFramework
 from test_framework.util import *
 from test_framework.mininode import ToHex, CTransaction, NetworkThread
-from test_framework.blocktools import create_coinbase, create_block
+from test_framework.blocktools import create_coinbase, create_block, ltor_sort_block
 from test_framework.comptool import TestInstance, TestManager
 from test_framework.script import *
 from io import BytesIO
@@ -143,6 +143,7 @@ class BIP68_112_113Test(ComparisonTestFramework):
         block = create_block(self.tip, create_coinbase(absoluteHeight=self.tipheight + 1), self.last_block_time + 600)
         block.nVersion = version
         block.vtx.extend(txs)
+        ltor_sort_block(block)
         block.hashMerkleRoot = block.calc_merkle_root()
         block.rehash()
         block.solve()
