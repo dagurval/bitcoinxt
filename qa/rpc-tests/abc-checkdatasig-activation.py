@@ -12,6 +12,9 @@ from test_framework.comptool import TestManager, TestInstance, RejectResult
 from test_framework.blocktools import *
 from test_framework.script import *
 
+from binascii import unhexlify
+from io import BytesIO
+
 # far into the future
 MAGNETIC_ANOMALY_START_TIME = 2000000000
 
@@ -67,6 +70,37 @@ class CheckDataSigActivationTest(ComparisonTestFramework):
         tx.vout[0].nValue -= get_relay_fee(node, unit = "sat")
         tx_signed = node.signrawtransaction(ToHex(tx))["hex"]
         return tx_signed
+
+    def create_checkdatasig_dummy_pair(self, opcode, outputs):
+        """Create two dummy transactions with a lot of outputs that use
+        CHECKDATASIG. More specifically, create two transactions with
+        cds_per_tx CHECKDATASIG operations. In the prefork situation and for a
+        value of x CDS sigops in the range 10k < x <20k, this should pass as a
+        valid block with the botched ABC CDS sigops counting rules, as they
+        correctly apply to the per-block counting. For a value >20k, this
+        should fail both on ABC as well as BU, also as per the botched ABC
+        activation rules.
+        """
+        node = self.nodes[0]
+        utxos = node.listunspent()
+        assert(len(utxos) > 1)
+        res = []
+
+        for i in range(2):
+            utxo = utxos[i]
+            tx = CTransaction()
+            value = int(satoshi_round(utxo["amount"]) * COIN)
+            tx.vin = [CTxIn(COutPoint(int(utxo["txid"], 16), utxo["vout"]))]
+            tx.vout = []
+            for i in range(outputs):
+                tx.vout.append(CTxOut(0, scriptPubKey=CScript([opcode] * 150)))
+            tx_signed = node.signrawtransaction(hexlify(tx.serialize()).decode("ascii"))["hex"]
+
+            txs = CTransaction()
+            txs.deserialize(BytesIO(unhexlify(tx_signed)))
+            res.append(txs)
+
+        return res
 
     def run_test(self):
         self.test = TestManager(self, self.options.tmpdir)
@@ -145,6 +179,38 @@ class CheckDataSigActivationTest(ComparisonTestFramework):
             block.solve()
             return block
 
+        def add_tx(block, tx):
+            block.vtx.append(tx)
+            block.hashMerkleRoot = block.calc_merkle_root()
+            block.solve()
+
+        # check regular sigops limit for completeness
+        b = next_block(MAGNETIC_ANOMALY_START_TIME - 6)
+        for tx in self.create_checkdatasig_dummy_pair(OP_CHECKSIG, 50):
+            add_tx(b, tx)
+        yield accepted(b)
+        b = next_block(MAGNETIC_ANOMALY_START_TIME - 5)
+        for tx in self.create_checkdatasig_dummy_pair(OP_CHECKSIG, 100):
+            add_tx(b, tx)
+        yield rejected(b)
+        b = next_block(MAGNETIC_ANOMALY_START_TIME - 4)
+        for tx in self.create_checkdatasig_dummy_pair(OP_CHECKSIG, 150):
+            add_tx(b, tx)
+        yield rejected(b)
+
+
+        # check that CDS does NOT count towards the PER BLOCK max sigops limit yet
+        b = next_block(MAGNETIC_ANOMALY_START_TIME - 3)
+        for tx in self.create_checkdatasig_dummy_pair(OP_CHECKDATASIG, 100):
+            add_tx(b, tx)
+        yield accepted(b)
+
+        # check that CDS DOES count towards the PER TRANSACTION max sigops limit already
+        b = next_block(MAGNETIC_ANOMALY_START_TIME - 2)
+        for tx in self.create_checkdatasig_dummy_pair(OP_CHECKDATASIG, 150):
+            add_tx(b, tx)
+        yield rejected(b)
+
         for i in range(6):
             b = next_block(MAGNETIC_ANOMALY_START_TIME + i - 1)
             yield accepted(b)
@@ -155,10 +221,9 @@ class CheckDataSigActivationTest(ComparisonTestFramework):
         assert_raises_rpc_error(-26, RPC_BAD_OPCODE_ERROR,
                                 node.sendrawtransaction, tx0_hex)
 
-        def add_tx(block, tx):
-            block.vtx.append(tx)
-            block.hashMerkleRoot = block.calc_merkle_root()
-            block.solve()
+        # check that a pair of txn with CDS opcodes will be accepted into a block
+
+
 
         b = next_block(MAGNETIC_ANOMALY_START_TIME + 6)
         add_tx(b, tx0)
@@ -178,6 +243,36 @@ class CheckDataSigActivationTest(ComparisonTestFramework):
         magneticanomalyblock = next_block(MAGNETIC_ANOMALY_START_TIME + 7)
         add_tx(magneticanomalyblock, tx0)
         yield accepted(magneticanomalyblock)
+
+        # check that CDS DOES count towards the PER BLOCK max sigops limit now
+        b = next_block(MAGNETIC_ANOMALY_START_TIME + 8)
+        for tx in self.create_checkdatasig_dummy_pair(OP_CHECKDATASIG, 100):
+            add_tx(b, tx)
+        yield rejected(b)
+
+        # check that CDS STILL DOES count towards the PER TRANSACTION max sigops limit now
+        b = next_block(MAGNETIC_ANOMALY_START_TIME + 9)
+        for tx in self.create_checkdatasig_dummy_pair(OP_CHECKDATASIG, 150):
+            add_tx(b, tx)
+        yield rejected(b)
+
+        # and again, check regular sigops limit for completeness
+        b = next_block(MAGNETIC_ANOMALY_START_TIME + 10)
+        for tx in self.create_checkdatasig_dummy_pair(OP_CHECKSIG, 50):
+            add_tx(b, tx)
+        yield accepted(b)
+
+        b = next_block(MAGNETIC_ANOMALY_START_TIME + 11)
+        for tx in self.create_checkdatasig_dummy_pair(OP_CHECKSIG, 100):
+            add_tx(b, tx)
+        yield rejected(b)
+
+        b = next_block(MAGNETIC_ANOMALY_START_TIME + 12)
+        for tx in self.create_checkdatasig_dummy_pair(OP_CHECKSIG, 150):
+             add_tx(b, tx)
+        yield rejected(b)
+
+
 
         self.log.info("Cause a reorg that deactivate the checkdatasig opcodes")
 
