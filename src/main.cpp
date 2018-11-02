@@ -2020,7 +2020,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                              REJECT_INVALID, "bad-txns-nonfinal");
         }
 
-        unsigned int nTxSigOps = GetLegacySigOpCount(tx);
+        unsigned int nTxSigOps = GetLegacySigOpCount(tx, flags);
         nSigOps += nTxSigOps;
         if (fStrictPayToScriptHash)
         {
